@@ -73,7 +73,7 @@ sdm = cn.load_spatial_data_from_dir(
 
 print("Plotting example species...")
 # species index (list stored in sdm.names)
-species_name = "Agarophyton.chilense"
+species_name = "Aristaeomorpha_ENS"
 species_i = sdm.names.index(species_name)
 cn.data.spatial_data.plot_data_evolution(
     sdm,
