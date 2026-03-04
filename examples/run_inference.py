@@ -42,7 +42,7 @@ FUTURE_DISTURBANCE_FILE = "env_layers/future_area_swept_disturbance.tif"
 COST_FILE = "env_layers/cost.tif"
 FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
-results_dir = "results"
+results_dir = "inference_results"
 
 # Policy settings
 N_TIME_STEPS = 50
