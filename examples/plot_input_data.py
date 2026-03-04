@@ -60,6 +60,7 @@ if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
 # Load present and future species distribution maps
 mask, _ = cn.data_loader.load_map(DATA_DIR / DATA_MASK)
 
+print("Loading data...")
 sdm = cn.load_spatial_data_from_dir(
     dir=DATA_DIR / PRESENT_SDMS_DIR,
     future_dir=DATA_DIR / FUTURE_SDMS_DIR,
@@ -70,6 +71,7 @@ sdm = cn.load_spatial_data_from_dir(
     min_threshold=MIN_HABITAT_SUITABILITY,
 )
 
+print("Plotting example species...")
 # species index (list stored in sdm.names)
 species_name = "Agarophyton.chilense"
 species_i = sdm.names.index(species_name)
@@ -104,6 +106,7 @@ cn.plots.plot_grid(
 )
 
 # Load disturbance layer with predicted future change
+print("Plotting disturbance layer...")
 disturbance = cn.load_spatial_data(
     file=DATA_DIR / DISTURBANCE_FILE,
     future_file=DATA_DIR / FUTURE_DISTURBANCE_FILE,
@@ -124,6 +127,7 @@ cn.data.spatial_data.plot_data_evolution(
 )
 
 # Load costs with predicted future change
+print("Plotting cost layer...")
 costs = cn.load_spatial_data(
     file=DATA_DIR / COST_FILE,
     future_file=DATA_DIR / FUTURE_COST_FILE,
@@ -152,6 +156,7 @@ traits = cn.data_loader.load_trait_table(
     fill_gaps=True,
 )
 
+print("Plotting extinction risk status...")
 conservation_status = traits["conservation_status"].to_numpy(copy=True) - 1
 
 # Initial extinction risk from conservation status
@@ -166,3 +171,6 @@ cn.plots.plot_extinction_risk(
     outfile=RES_DIR / "Extinction_risk",
     dpi=200,
 )
+
+print("Done.")
+print("Plots seved in:", RES_DIR)
