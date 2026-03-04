@@ -44,8 +44,7 @@ FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
 results_dir = "results"
 
-# Trained model and policy settings
-TRAINED_MODEL = ""
+# Policy settings
 N_TIME_STEPS = 50
 TARGET_PROTECTED_CELLS = 17000
 CELLS_PER_STEP = 1000
