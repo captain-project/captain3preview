@@ -36,7 +36,6 @@ SEED = 42
 # =============================================================================
 
 # Data paths - UPDATE THESE to point to your data
-# Example data: https://polybox.ethz.ch/index.php/s/EckG8nXEfiHCkDE
 DATA_DIR = Path("/path/to/your/captain3data")  # <-- Change this!
 
 # Here using a subset of 30 species for testing
@@ -255,12 +254,6 @@ def main():
         print("\nERROR: Please update DATA_DIR in this script to point to your data.")
         print("       See the example data repository for the expected format.")
         raise FileNotFoundError
-
-    # Check data directory
-    if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
-        print("\nERROR: Please update DATA_DIR in this script to point to your data.")
-        print("       See the example data repository for the expected format.")
-        return
 
     print(f"\nDevice: {DEVICE}")
 
