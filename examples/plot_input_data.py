@@ -37,7 +37,6 @@ COST_FILE = "env_layers/cost.tif"
 FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
 results_dir = "plots"
-os.makedirs(DATA_DIR / results_dir, exist_ok=True)
 
 # Time duration of each episode
 N_TIME_STEPS = 50  
@@ -45,17 +44,19 @@ N_TIME_STEPS = 50
 # Minimum habitat suitability threshold
 MIN_HABITAT_SUITABILITY = 0.05  # can be an array (per-species values)
 
-# Output
-RES_DIR = DATA_DIR / results_dir
-
-# =============================================================================
-# Episode Setup Function
-# =============================================================================
 # Check data directory
 if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
     print("\nERROR: Please update DATA_DIR in this script to point to your data.")
     print("       See the example data repository for the expected format.")
     raise FileNotFoundError
+
+# Output
+os.makedirs(DATA_DIR / results_dir, exist_ok=True)
+RES_DIR = DATA_DIR / results_dir
+
+# =============================================================================
+# Episode Setup Function
+# =============================================================================
 
 # Load present and future species distribution maps
 mask, _ = cn.data_loader.load_map(DATA_DIR / DATA_MASK)

@@ -70,6 +70,14 @@ MODEL_FILE = "trained_weights.npy"
 PLOT_FEATURES = True
 PLOT_TRAIN_FREQ = 1  # plot intermediate protection results during training
 
+
+# Check data directory
+if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
+    print("\nERROR: Please update DATA_DIR in this script to point to your data.")
+    print("       See the example data repository for the expected format.")
+    raise FileNotFoundError
+
+
 os.makedirs(RESULTS_DIR, exist_ok=True)
 if PLOT_FEATURES:
     # RESULTS_DIR_PLOTS = RESULTS_DIR / "data_plots"
@@ -248,12 +256,6 @@ def main():
     print("=" * 60)
     print("CAPTAIN-3 Training")
     print("=" * 60)
-
-    # Check data directory
-    if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
-        print("\nERROR: Please update DATA_DIR in this script to point to your data.")
-        print("       See the example data repository for the expected format.")
-        raise FileNotFoundError
 
     print(f"\nDevice: {DEVICE}")
 

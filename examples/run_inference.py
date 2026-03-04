@@ -43,7 +43,6 @@ COST_FILE = "env_layers/cost.tif"
 FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
 results_dir = "results"
-os.makedirs(DATA_DIR / results_dir, exist_ok=True)
 
 # Trained model and policy settings
 TRAINED_MODEL = ""
@@ -58,6 +57,14 @@ DISPERSAL_WINDOW = 3
 MIN_HABITAT_SUITABILITY = 0.05  # can be an array (per-species values)
 
 # Output
+# Check data directory
+if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
+    print("\nERROR: Please update DATA_DIR in this script to point to your data.")
+    print("       See the example data repository for the expected format.")
+    raise FileNotFoundError
+
+os.makedirs(DATA_DIR / results_dir, exist_ok=True)
+
 RES_DIR = DATA_DIR / results_dir
 LOG_FILE = "training_log.tsv"
 PLOT_DATA = True
@@ -65,11 +72,6 @@ PLOT_DATA = True
 # =============================================================================
 # Episode Setup Function
 # =============================================================================
-# Check data directory
-if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
-    print("\nERROR: Please update DATA_DIR in this script to point to your data.")
-    print("       See the example data repository for the expected format.")
-    raise FileNotFoundError
 
 # Load present and future species distribution maps
 mask, _ = cn.data_loader.load_map(DATA_DIR / DATA_MASK)
