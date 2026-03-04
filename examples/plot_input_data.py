@@ -88,7 +88,7 @@ cn.data.spatial_data.plot_data_evolution(
 )
 
 cn.plots.plot_grid(
-    np.sum(sdm.reconstruct_grid > 0.75, axis=0),
+    np.sum(sdm.reconstruct_grid > 0.5, axis=0),
     title="Species richness (present habitat suitability)",
     outfile=RES_DIR / "Species_richness_present",
     vmin=0,
@@ -98,7 +98,7 @@ cn.plots.plot_grid(
 
 sdm.update(50)
 cn.plots.plot_grid(
-    np.sum(sdm.reconstruct_grid > 0.75, axis=0),
+    np.sum(sdm.reconstruct_grid > 0.5, axis=0),
     title="Species richness (future habitat suitability)",
     outfile=RES_DIR / "Species_richness_future",
     vmin=0,
