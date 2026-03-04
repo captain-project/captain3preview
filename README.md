@@ -49,7 +49,7 @@ Once `uv` is installed, clone the repository and sync the dependencies. This wil
 
 ```bash
 # Clone and enter the repository
-git clone [https://github.com/captain-project/captain3preview](https://github.com/captain-project/captain3preview)
+git clone https://github.com/captain-project/captain3preview
 cd captain3preview
 
 # Sync dependencies and create virtual environment
@@ -84,6 +84,14 @@ Working example scripts are in the `examples/` folder:
 
 Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WJbyDA6ZnwHKKHe). 
 A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5AMXPdzboZSm2). 
+
+To run a script e.g.:
+
+```bash
+cd examples
+# Sync dependencies and create virtual environment
+uv run plot_input_data.py
+```
 
 CAPTAIN 3 can also be run from the python console. In a Terminal window, browse to the captain3preview directory and launch Python using:
 
