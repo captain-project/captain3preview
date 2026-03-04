@@ -10,7 +10,7 @@ A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5A
 
 The scripts generate a number of plots, included the optimal configuration of protected areas under the given policy constraints and objectives.
 
-<img src="docs/example_protection_through_time.png" alt="Species Distribution" width="50%">
+<img width="1800" height="2400" alt="example_protection_through_time" src="https://github.com/user-attachments/assets/f8afeb71-6bc8-472a-ae29-e616d1ae272d" />
 
 
 To run a script e.g.:
