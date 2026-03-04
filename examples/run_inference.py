@@ -65,6 +65,11 @@ PLOT_DATA = True
 # =============================================================================
 # Episode Setup Function
 # =============================================================================
+# Check data directory
+if not DATA_DIR.exists() or str(DATA_DIR) == "/path/to/your/data":
+    print("\nERROR: Please update DATA_DIR in this script to point to your data.")
+    print("       See the example data repository for the expected format.")
+    raise FileNotFoundError
 
 # Load present and future species distribution maps
 mask, _ = cn.data_loader.load_map(DATA_DIR / DATA_MASK)
