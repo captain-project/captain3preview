@@ -217,14 +217,6 @@ def create_episode_runner() -> cn.EpisodeRunner:
         ],
         reward_weights=np.array([1.0, 1.0]),
     )
-    # rewards.calc_reward(env)
-
-    if PLOT_DATA:
-        cn.plots.plot_grid(
-            np.sum(env.reconstruct_h_grid > 1, axis=0),
-            title="species richness",
-            outfile=RESULTS_DIR_PLOTS / "species_richness",
-        )
 
     # Create episode runner
     ep = cn.EpisodeRunner(
