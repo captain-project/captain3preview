@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Example: Train a conservation policy with Evolution Strategies.
+"""Example: Infer protection matrix from trained model.
 
 This script demonstrates how to:
 1. Load real spatial data (habitat suitability maps, disturbance, costs, ...)
