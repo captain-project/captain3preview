@@ -5,7 +5,7 @@ Working example scripts are in the `examples/` folder:
 - **[train_policy.py](https://github.com/captain-project/captain3preview/blob/main/examples/train_policy.py)** - Full training loop with real data
 - **[run_inference.py](https://github.com/captain-project/captain3preview/blob/main/examples/run_inference.py)** - Load a trained model and perform optimization
 
-Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WJbyDA6ZnwHKKHe). 
+Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WKdbHHGj3ayL9w9). 
 A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5AMXPdzboZSm2). 
 
 The scripts generate a number of plots, included the optimal configuration of protected areas under the given policy constraints and objectives.
