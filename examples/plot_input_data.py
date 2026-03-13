@@ -1,13 +1,8 @@
 #!/usr/bin/env python
-"""Example: Train a conservation policy with Evolution Strategies.
-
+"""
 This script demonstrates how to:
 1. Load real spatial data (habitat suitability maps, disturbance, costs, ...)
 2. Plot the data and their evolution through time
-
-Requirements:
-- Example data in DATA_DIR (see below)
-- Species trait CSV file
 
 """
 
