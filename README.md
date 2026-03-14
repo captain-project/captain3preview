@@ -85,9 +85,7 @@ Working example scripts are in the [examples folder](https://github.com/captain-
 Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WJbyDA6ZnwHKKHe). 
 A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5AMXPdzboZSm2). 
 
-
-
-
+<img width="50%" alt="animated_map" src="https://github.com/user-attachments/assets/9ef85156-9a76-4a32-8c29-d5960481a7cb" />
 
 ## Project Structure
 
