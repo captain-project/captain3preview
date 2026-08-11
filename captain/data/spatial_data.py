@@ -192,7 +192,7 @@ class SpatialData:
         """Update the mask of cells with any non-zero values."""
         self._nonzero_cells_mask = torch.any(self._data > 0, dim=0)
 
-    def update_col_values(
+    def update_cell_values(
             self, idx: torch.Tensor | np.ndarray | list, val: float
     ) -> None:
         """Set values for specific columns (cells).
@@ -213,6 +213,13 @@ class SpatialData:
         """Create a 3D array for visualization (returns NumPy for plotting)."""
         return grid_utils.reconstruct_grid(
             self._data.cpu().numpy(), self._coords, self._data_shape[1:]
+        )
+
+    @property
+    def reconstruct_grid_threshold(self) -> np.ndarray:
+        """Create a 3D array for visualization (returns NumPy for plotting)."""
+        return grid_utils.reconstruct_grid(
+            self.data_min_threshold.cpu().numpy(), self._coords, self._data_shape[1:]
         )
 
     @property
@@ -336,9 +343,11 @@ def plot_data_evolution(
         cmap: str = "YlGnBu",
         vmin: float | None = None,
         vmax: float | None = None,
+        apply_min_threshold: bool = True,
         create_gif: bool = True,
         remove_png: bool = True,
-        duration_ms=100,
+        frame_duration_ms: int = 100,
+        gif_duration_sec: int | None = None,
         figsize=(5, 6),
 ) -> None:
     """Plot temporal evolution of spatial data.
@@ -366,8 +375,14 @@ def plot_data_evolution(
         )
         dat.update()
         if i % skip == 0:
+
+            if apply_min_threshold:
+                d = dat.reconstruct_grid_threshold[indx]
+            else:
+                d = dat.reconstruct_grid[indx]
+
             plots.plot_grid(
-                dat.reconstruct_grid[indx],
+                d,
                 title=f"{title} - time step {i}",
                 outfile=f_name,
                 cmap=cmap,
@@ -377,7 +392,9 @@ def plot_data_evolution(
             )
             file_names.append(f_name)
     if create_gif:
-        plots.create_gif(file_names, duration_ms=duration_ms, rm_png=remove_png)
+        if gif_duration_sec is not None:
+            frame_duration_ms = gif_duration_sec * 1000 / len(file_names)
+        plots.create_gif(file_names, duration_ms=frame_duration_ms, rm_png=remove_png)
 
 
 def load_spatial_data(

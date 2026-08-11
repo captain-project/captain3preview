@@ -326,7 +326,7 @@ class BioEnv:
         Args:
             idx: Indices of cells to protect.
         """
-        self.protection_matrix.update_col_values(idx, 1.0)
+        self.protection_matrix.update_cell_values(idx, 1.0)
 
     def reset(self) -> None:
         """Reset environment to initial state."""
