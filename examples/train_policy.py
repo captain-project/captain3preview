@@ -10,6 +10,7 @@ This script demonstrates how to:
 Requirements:
 - Example data in DATA_DIR (see below)
 - Species trait CSV file
+- A reward calibration file (run calibrate_rewards.py once first)
 
 To run with synthetic data instead, see run_episode.py.
 """
@@ -25,6 +26,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 import captain as cn
@@ -38,43 +40,62 @@ logging.basicConfig(
 
 # Device configuration: run on GPU is available (needs CUDA)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-SEED = 42
+SEED = 123
 # =============================================================================
 # Configuration
 # =============================================================================
 
-# Data paths - UPDATE THESE to point to your data
-DATA_DIR = Path("/path/to/your/captain3data")  # <-- Change this!
+# Data paths - the repo's own toy dataset, resolved relative to this script
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# Here using a subset of 30 species for testing
-PRESENT_SDMS_DIR = "subset/present_sdms"
-FUTURE_SDMS_DIR = "subset/future_sdms"
-SPECIES_TRAIT_FILE = "subset/species_tbl.csv"
+PRESENT_SDMS_DIR = "present_sdms"
+FUTURE_SDMS_DIR = "future_sdms"
+SPECIES_TRAIT_FILE = "species_tbl.csv"
 DISTURBANCE_FILE = "env_layers/area_swept_disturbance.tif"
 FUTURE_DISTURBANCE_FILE = "env_layers/future_area_swept_disturbance.tif"
 COST_FILE = "env_layers/cost.tif"
 FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
 
+# Regional-agent setup: USE_REGIONAL_AGENTS=True trains one coordinated agent
+# per region (see scripts/create_toy_regions.py). When False, REGION_ID
+# selects a single global agent (None = unrestricted, or a region NAME from
+# regions_tbl.csv to restrict that single agent to just that region).
+USE_REGIONAL_AGENTS = False
+REGION_ID = None
+REGION_FILE = "env_layers/regions.tif"
+REGION_TABLE = "env_layers/regions_tbl.csv"
+REWARD_WEIGHTS = np.array([1.0, 1.0])
+
 # Training and policy parameters
-N_EPOCHS = 3
-N_PERTURBATIONS = 2  # Number of parallel episode evaluations (sequential on GPU)
-N_PROBES = 5  # Number of perturbations for reward calibration
-N_PARALLEL_WORKERS = 2  # Number of CPUs (if not CUDA)
+N_EPOCHS = 20
+N_PERTURBATIONS = 6  # Number of parallel episode evaluations (sequential on GPU)
+N_PARALLEL_WORKERS = 4  # Number of CPUs (if not CUDA)
 N_TIME_STEPS = 50  # Time duration of each episode
-TARGET_PROTECTED_CELLS = 17000  # Total number of cells to be protected
+TARGET_PROTECTED_CELLS_FRACTION = 0.10  # Fraction of valid cells to be protected
 CELLS_PER_STEP = 1000  # number of new cells protected at each time step
-CALIBRATE_REWARDS = True
 
 # Species parameters
 AVG_CARRYING_CAPACITY = 100  # 'individuals' per cells (* empirical relative abundance)
 DISPERSAL_RATE = 0.5  # can be an array (per-species values)
 DISPERSAL_WINDOW = 3
-MIN_HABITAT_SUITABILITY = 0.05  # can be an array (per-species values)
+MIN_HABITAT_SUITABILITY = None  # Overwritten below by species-specific thresholds
 
 # Output
-RESULTS_DIR = DATA_DIR / "training_results"
-LOG_FILE = "training_log.tsv"
+if USE_REGIONAL_AGENTS:
+    res_name = "regions"
+elif REGION_ID is None:
+    res_name = "global"
+else:
+    res_name = REGION_ID
+
+RESULTS_DIR = DATA_DIR / (
+        res_name
+        + "_w"
+        + "_w".join([str(r) for r in REWARD_WEIGHTS])
+        + f"_p{TARGET_PROTECTED_CELLS_FRACTION}"
+)
+LOG_FILE = res_name + "_log.tsv"
 MODEL_FILE = "trained_weights.npy"
 CALIBRATION_FILE = DATA_DIR / "reward_calibration.json"
 PLOT_FEATURES = False
@@ -142,11 +163,61 @@ def create_episode_runner() -> cn.EpisodeRunner:
         n_time_steps=N_TIME_STEPS,
     )
 
+    # Regional-agent setup: build per-region masks/targets, or a single
+    # action_mask restricting a global agent to one region.
+    TARGET_PROTECTED_CELLS = int(TARGET_PROTECTED_CELLS_FRACTION * np.nansum(mask))
+
+    if USE_REGIONAL_AGENTS:
+        tmp, _ = cn.data_loader.load_map(DATA_DIR / REGION_FILE)
+        region_tbl = pd.read_csv(DATA_DIR / REGION_TABLE)
+
+        regional_totals, per_step_regional_targets, region_masks = {}, {}, {}
+        for region_num, name in zip(region_tbl["REGION_ID"], region_tbl["NAME"]):
+            r_mask = cn.SpatialData(
+                data=tmp == region_num, mask=mask, lower_bound=0, upper_bound=1
+            )
+            target = int(TARGET_PROTECTED_CELLS_FRACTION * r_mask.data.sum())
+            regional_totals[name] = target
+            per_step_regional_targets[name] = int(
+                CELLS_PER_STEP * (r_mask.data.sum() / np.nansum(mask))
+            )
+            region_masks[name] = r_mask._nonzero_cells_mask
+            print(
+                f"Region {region_num} ({name}): size={r_mask.data.sum()}, "
+                f"target={target}, per_step={per_step_regional_targets[name]}"
+            )
+
+        region_mask = None  # regional mode does not restrict env.action_mask
+
+    elif REGION_ID is None:
+        region_mask = None
+
+    else:
+        tmp, _ = cn.data_loader.load_map(DATA_DIR / REGION_FILE)
+        region_tbl = pd.read_csv(DATA_DIR / REGION_TABLE)
+        match = region_tbl.loc[region_tbl["NAME"] == REGION_ID, "REGION_ID"]
+        if match.empty:
+            raise ValueError(f"REGION_ID {REGION_ID!r} not found in {REGION_TABLE}")
+        region_num = match.iloc[0]
+
+        region_mask = cn.SpatialData(
+            data=tmp != region_num, mask=mask, lower_bound=0, upper_bound=1
+        )
+        TARGET_PROTECTED_CELLS = int(
+            TARGET_PROTECTED_CELLS_FRACTION * (1 - region_mask.data).sum()
+            + protection.data.sum()
+        )
+
     # Load species traits
     # simple imputation of missing data (could be replaced e.g. RF imputation)
     traits = cn.data_loader.load_trait_table(
         DATA_DIR / SPECIES_TRAIT_FILE, sdm.names, ref_column="species", fill_gaps=True
     )
+
+    # Per-species minimum habitat suitability (overrides the scalar
+    # MIN_HABITAT_SUITABILITY set above; below this threshold a cell doesn't
+    # contribute to that species' carrying capacity)
+    sdm.reset_threshold(traits["min_habitat_suitability"].to_numpy())
 
     # extract parameters for simulation
     sensitivity = traits["sensitivity_disturbance"].to_numpy(copy=True)[:, np.newaxis]
@@ -164,7 +235,7 @@ def create_episode_runner() -> cn.EpisodeRunner:
     )
 
     # Load or create dispersal matrix (cached for efficiency)
-    disp_file = DATA_DIR / f"dispersal_d{DISPERSAL_RATE}_t{DISPERSAL_WINDOW}_NEW.npz"
+    disp_file = DATA_DIR / f"dispersal_d{DISPERSAL_RATE}_t{DISPERSAL_WINDOW}.npz"
     if not disp_file.exists():
         print(f"Creating dispersal matrix: {disp_file}")
         cn.grid_utils.save_dispersal_distances(
@@ -189,6 +260,7 @@ def create_episode_runner() -> cn.EpisodeRunner:
         sensitivity_rates=sensitivity,
         cached_dispersal_matrix=dispersal_matrix,
         ext_risk=ext_risk,
+        action_mask=region_mask,  # None, or restricts actions to one region
         device=DEVICE,
     )
 
@@ -209,7 +281,10 @@ def create_episode_runner() -> cn.EpisodeRunner:
     env.ext_risk.species_per_class(env.current_ext_risk)
 
     model = cn.CellNN(input_dim=feature_extractor.n_features, hidden_dim=16)
-    policy = cn.PolicyNetwork(model, seed=SEED, device=DEVICE)
+    if USE_REGIONAL_AGENTS:
+        policy = cn.RegionalPolicyNetwork(model, seed=SEED, device=DEVICE)
+    else:
+        policy = cn.PolicyNetwork(model, seed=SEED, device=DEVICE)
 
     rewards = cn.Rewards(
         reward_obj_list=[
@@ -218,7 +293,7 @@ def create_episode_runner() -> cn.EpisodeRunner:
             ),
             cn.CalcRewardPersistentCost(rescaler=float(1.0 / costs.data.sum())),
         ],
-        reward_weights=np.array([1.0, 1.0]),
+        reward_weights=REWARD_WEIGHTS,
     )
 
     if PLOT_DATA:
@@ -230,11 +305,18 @@ def create_episode_runner() -> cn.EpisodeRunner:
         PLOT_DATA = False
 
     # Create episode runner
-    budget_manager = cn.GlobalBudgetManager(
-        total_target=TARGET_PROTECTED_CELLS,
-        cells_per_time_step=CELLS_PER_STEP,
-        feature_updates_per_time_step=1,
-    )
+    if USE_REGIONAL_AGENTS:
+        budget_manager = cn.RegionalBudgetManager(
+            masks=region_masks,
+            total_targets=regional_totals,
+            cells_per_time_step=per_step_regional_targets,
+        )
+    else:
+        budget_manager = cn.GlobalBudgetManager(
+            total_target=TARGET_PROTECTED_CELLS,
+            cells_per_time_step=CELLS_PER_STEP,
+            feature_updates_per_time_step=1,
+        )
 
     ep = cn.EpisodeRunner(
         env=env,
@@ -294,20 +376,20 @@ def main():
     trainer = cn.EvolStrategiesTrainer(
         episode_runners,
         initial_coeffs=episode.policy.get_flat_weights(),
-        scheduler=cn.LearningScheduler(initial_alpha=0.2, initial_sigma=0.3),
-        epsilon_reward=0.5,
+        scheduler=cn.LearningScheduler(initial_alpha=0.05, initial_sigma=0.3),
+        epsilon_reward=0.75,
         n_perturbations=N_PERTURBATIONS,
         seed=SEED,
     )
 
-    # Heuristic Reward Calibration
-    if CALIBRATE_REWARDS:
-        multipliers = trainer.get_reward_calibrated_weights(
-            n_probes=N_PROBES, verbose=True
+    # Load reward calibration. This is always computed once against the
+    # global agent (see calibrate_rewards.py) and reused here regardless of
+    # USE_REGIONAL_AGENTS/REGION_ID, so reward values stay comparable across
+    # global/regional/single-region runs.
+    if not CALIBRATION_FILE.exists():
+        raise FileNotFoundError(
+            f"{CALIBRATION_FILE} not found — run calibrate_rewards.py first."
         )
-        trainer.save_reward_calibration(multipliers, CALIBRATION_FILE)
-
-    # Initialize Logger
     trainer.load_reward_calibration(CALIBRATION_FILE, verbose=True)
 
     logger = cn.algorithms.TrainingLogger(
@@ -337,6 +419,16 @@ def main():
     print(f"Log saved to: {logger.log_path}")
     print(f"Weights saved to: {logger.weights_path}")
     # TODO save scheduler checkpoint to restart
+
+    # Plot reward across epochs
+    reward_plot_path = RESULTS_DIR / "reward_over_training.png"
+    cn.plots.plot_rl_rewards(
+        logger.log_path,
+        title=f"Reward over training ({res_name})",
+        outfile=reward_plot_path,
+        reward_col="avg_reward",
+    )
+    print(f"Reward plot saved to: {reward_plot_path}")
 
     # Cleanup
     trainer.close()

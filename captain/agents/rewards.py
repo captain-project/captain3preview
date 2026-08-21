@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 if TYPE_CHECKING:
     from captain.environment.bioenv import BioEnv
@@ -44,6 +45,7 @@ class CalcReward:
         self._name = name
         self._rescaler = rescaler if positive else -rescaler
         self._positive = positive
+        self._target_achieved = False
 
     @property
     def name(self) -> str:
@@ -63,6 +65,7 @@ class CalcReward:
 
     def reset(self) -> None:
         """Reset any internal state (called at episode start)."""
+        self._target_achieved = False
         pass
 
     @property
@@ -192,6 +195,7 @@ class CalcRewardExtRisk(CalcReward):
     def reset(self) -> None:
         """Reset tracking state."""
         self._previous_status_counts = None
+        self._target_achieved = False
 
     def to(self, device: torch.device | str) -> CalcRewardExtRisk:
         """Move to specified device.
@@ -208,10 +212,6 @@ class CalcRewardExtRisk(CalcReward):
             self._previous_status_counts = self._previous_status_counts.to(self.device)
         return self
 
-    def reset(self) -> None:
-        """Reset tracking state."""
-        self._previous_status_counts = None
-
 
 class CalcRewardSpecieValue(CalcReward):
     """Reward based on total amount of species 'value'"""
@@ -225,10 +225,13 @@ class CalcRewardSpecieValue(CalcReward):
             device: torch.device | str = "cpu",
             trait_column_indx: int | None = None,  # if None set based on trait_name
             protected_value: bool = False,  # If true only calculate the total value within protected areas
+            species_range: bool = False,
+            # True: weigh species only based on presence/absence; False: weigh by population
     ):
-        """Initialize extinction risk reward.
+        """Initialize species value reward.
 
         Args:
+            trait_name: which trait defines species value (from env.trait_map)
             name: Reward identifier.
             rescaler: Scaling factor.
             positive: If True, improvements yield positive reward.
@@ -246,6 +249,7 @@ class CalcRewardSpecieValue(CalcReward):
         self._trait_name = trait_name
         self._trait_column_indx = trait_column_indx
         self._protected_value = protected_value
+        self._species_range = species_range
 
     def calc_reward(self, env: BioEnv) -> float:
         if self._trait_column_indx is None:
@@ -253,18 +257,72 @@ class CalcRewardSpecieValue(CalcReward):
 
         # average value
         if self._protected_value:
-            # Result is the average abundance per masked cell for each species
-            # 'max(1.0, sum)'
-            avg_abundance = (env.h @ env.protected_cells_mask.float()) / torch.clamp(
-                env.protected_cells_mask.sum(), min=1.0
-            )
+            if self._species_range:
+                # protected range per species (i.e. does not weigh more species
+                # with higher carrying capacity)
+                protected_amount_per_species = env.protected_range / torch.clamp(
+                    env.protected_cells_mask.sum(), min=1.0
+                )
+            else:
+                # Result is the average abundance per masked cell for each species
+                # (i.e. weighs more species with higher carrying capacity all else equal
+                # e.g. carbon or biomass)
+                protected_amount_per_species = env.protected_population / torch.clamp(
+                    env.protected_cells_mask.sum(), min=1.0
+                )
 
-            # 3. Final dot product with traits
+            # Dot product with value (species-specific trait)
             reward = torch.dot(
-                env._species_traits[:, self._trait_column_indx], avg_abundance
+                env._species_traits[:, self._trait_column_indx],
+                protected_amount_per_species,
             )
         else:
             reward = torch.dot(
                 env._species_traits[:, self._trait_column_indx], env.h.mean(dim=1)
             )
         return reward.item() * self._rescaler
+
+
+class CalcRewardDistFromTarget(CalcReward):
+    """Reward based on min distance to target, requires env with distance_calculator attribute."""
+
+    def __init__(
+            self,
+            name: str = "distance_from_target",
+            rescaler: float = 1.0,
+            positive: bool = False,  # minimize
+            exponent: float = 1,
+    ):
+        """Initialize distance reward.
+
+        Args:
+            name: Reward identifier.
+            rescaler: Scaling factor (typically 1/total_budget).
+            positive: If False, cost is a penalty (default).
+        """
+        super().__init__(name, rescaler, positive)
+        self._exponent = exponent
+
+
+
+
+class CalcRewardEdgeEffect(CalcReward):
+    """Reward based on min distance to target, requires env with distance_calculator attribute."""
+
+    def __init__(
+            self,
+            name: str = "edge_effect",
+            rescaler: float = 1.0,
+            positive: bool = True,  # maximize
+            exponent: float = 1,
+    ):
+        """Initialize distance reward.
+
+        Args:
+            name: Reward identifier.
+            rescaler: Scaling factor (typically 1/total_budget).
+            positive: If False, cost is a penalty (default).
+        """
+        super().__init__(name, rescaler, positive)
+        self._exponent = exponent
+

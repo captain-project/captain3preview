@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "3.0.0 beta - 20260304"
+__version__ = "3.0.0 beta - 20260821"
 
 # Data structures
 # Agents
@@ -17,6 +17,7 @@ from captain.agents.policy_network import (
 from captain.agents.reward_aggregator import NoRewards, Rewards
 from captain.agents.rewards import (
     CalcReward,
+    CalcRewardDistFromTarget,
     CalcRewardExtRisk,
     CalcRewardPersistentCost,
     CalcRewardSpecieValue,
@@ -30,7 +31,7 @@ from captain.algorithms.budget_manager import (
 )
 
 # Algorithms
-from captain.algorithms.episode import EpisodeRunner
+from captain.algorithms.episode import BridgeEpisodeRunner, EpisodeRunner
 from captain.algorithms.evolution_train import EvolStrategiesTrainer
 from captain.algorithms.scheduler import LearningScheduler
 from captain.data.extinction_risk import ExtinctionRisk, ExtinctionRiskStatic
@@ -68,12 +69,14 @@ __all__ = [
     "SpatialCNN",
     "CalcReward",
     "CalcRewardExtRisk",
+    "CalcRewardDistFromTarget",
     "CalcRewardPersistentCost",
     "CalcRewardSpecieValue",
     "Rewards",
     "NoRewards",
     # Algorithms
     "EpisodeRunner",
+    "BridgeEpisodeRunner",
     "EvolStrategiesTrainer",
     "LearningScheduler",
     "TrainingLogger",

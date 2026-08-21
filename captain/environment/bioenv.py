@@ -18,7 +18,7 @@ from scipy import sparse as sp
 from captain.data.extinction_risk import ExtinctionRisk
 from captain.data.spatial_data import SpatialData
 from captain.utils import grid_utils
-from captain.utils.grid_utils import scipy_sparse_to_torch
+from captain.utils.grid_utils import DistanceFromTarget, scipy_sparse_to_torch
 
 if TYPE_CHECKING:
     pass
@@ -56,6 +56,7 @@ class BioEnv:
             cached_dispersal_matrix: sp.csr_matrix | torch.Tensor | None = None,
             species_traits: pd.DataFrame | None = None,
             action_mask: SpatialData | None = None,
+            distance_calculator: DistanceFromTarget | None = None,
             device: torch.device | str = "cpu",
     ):
         """Initialize biodiversity environment.
@@ -89,6 +90,7 @@ class BioEnv:
             self.action_mask = action_mask.to(self.device)
         else:
             self.action_mask = None
+        self.distance_calculator = distance_calculator
 
         # Dimensions
         self.n_species = sdms.shape[0]
@@ -339,6 +341,8 @@ class BioEnv:
         self.update_carrying_capacity()
         self.init_h()
         self.set_init_ext_risk()
+        if self.action_mask is not None:
+            self.action_mask.reset()
 
     def init_h(self) -> None:
         """Initialize population to carrying capacity."""
@@ -382,6 +386,21 @@ class BioEnv:
             init_pop=self._h.sum(dim=1),
             init_protected_pop=self.protected_population,
         )
+
+    def get_distance_from_target(
+            self, focal_cells: torch.Tensor | None = None, normalize: bool = True
+    ) -> torch.Tensor | None:
+        """Calculate distance from target cells (boolean), shape = self.sdms.data.shape"""
+        # By default returns distance from action mask
+        if self.distance_calculator is not None:
+            if focal_cells is None:
+                focal_cells = self.action_mask.data == 0
+            dist_to_target = self.distance_calculator.calculate_min_distances(
+                focal_cells, normalize=normalize
+            )
+        else:
+            dist_to_target = None
+        return dist_to_target
 
     @property
     def h(self) -> torch.Tensor:
@@ -441,6 +460,12 @@ class BioEnv:
         return self.ext_risk.species_per_class_dict(
             self.current_ext_risk, normalize=False
         )
+
+    @property
+    def protected_range(self) -> torch.Tensor:
+        """Number of cells in protected areas per species, shape (n_species,)."""
+        # (s, x) @ (x,) -> (s,)
+        return (self._h > 0).float() @ self.protected_cells_mask.float()
 
     def to(self, device: torch.device | str) -> BioEnv:
         """Move environment to specified device.

@@ -21,6 +21,8 @@ CAPTAIN is a reinforcement learning system for optimizing conservation and resto
 
 🤖 **Decentralized Regional Agents:** Features regional agents designed to optimize spatially-distributed conservation strategies.
 
+📘 **Hands-on Tutorial:** A step-by-step [toy-example walkthrough](https://github.com/captain-project/captain3preview/blob/main/tutorials/toy_example/README.md) covering data setup, reward calibration, training, and global vs. regional agents on a small toy dataset.
+
 
 ### ⚠️ Notice
 **This repository contains a preview of CAPTAIN v.3.**
@@ -87,6 +89,11 @@ Working example scripts are in the [examples folder](https://github.com/captain-
 
 Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WKdbHHGj3ayL9w9). 
 A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5AMXPdzboZSm2). 
+
+For a quicker, self-contained walkthrough using a small toy dataset, see the
+[toy-example tutorial](https://github.com/captain-project/captain3preview/blob/main/tutorials/toy_example/README.md) —
+covers data setup, reward calibration, training, and running inference with
+both a single global agent and coordinated regional agents.
 
 <img width="50%" alt="animated_map" src="https://github.com/user-attachments/assets/9ef85156-9a76-4a32-8c29-d5960481a7cb" />
 

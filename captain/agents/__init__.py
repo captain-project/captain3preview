@@ -5,9 +5,10 @@ from __future__ import annotations
 from captain.agents.feature_extractor import FeatureExtractor
 from captain.agents.feature_extractor_cnn import FeatureExtractorCNN
 from captain.agents.policy_network import CellCNNPolicy, CellNN, PolicyNetwork
-from captain.agents.reward_aggregator import Rewards, NoRewards
+from captain.agents.reward_aggregator import NoRewards, Rewards
 from captain.agents.rewards import (
     CalcReward,
+    CalcRewardDistFromTarget,
     CalcRewardExtRisk,
     CalcRewardPersistentCost,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "CalcReward",
     "CalcRewardExtRisk",
     "CalcRewardPersistentCost",
+    "CalcRewardDistFromTarget",
     "Rewards",
     "NoRewards",
 ]

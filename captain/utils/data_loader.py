@@ -1,6 +1,7 @@
 import glob
 import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ def load_map(
         clip_min: float | None = None,
         clip_max: float | None = None,
         nan_to_num: bool = False,
+        select_channel: None | int = 0,
 ):
     extension = os.path.splitext(filename)[1]
 
@@ -25,7 +27,13 @@ def load_map(
             message="angle from rectified to skew grid parameter lost in conversion to CF",
         )
 
-        data = rxr.open_rasterio(filename).to_numpy()[0]
+        data = rxr.open_rasterio(filename).to_numpy()
+        if data.shape[0] > 1 and data.ndim == 3:
+            # data = data[0]
+            print(f"Multiple channels detected in file {filename}")
+            if select_channel is not None:
+                data = data[select_channel]
+                print(f"Selecting channel {select_channel}")
         name = os.path.basename(filename).split(".tif")[0]
     elif extension == ".npy":
         data = np.load(filename)
@@ -122,7 +130,9 @@ def reorder_by_species(df, species_list, ref_column: str | None):
 
 
 def create_mask_from_map(
-        filename: str, output_file: str = None, zero_to_nan: bool = False
+        filename: str | Path,
+        output_file: str | Path | None = None,
+        zero_to_nan: bool = False,
 ):
     m, _ = load_map(filename)
     if zero_to_nan:

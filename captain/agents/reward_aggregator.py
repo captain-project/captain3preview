@@ -38,12 +38,12 @@ class Rewards:
     """
 
     def __init__(
-        self,
-        reward_obj_list: list[CalcReward] | None,
-        discount_factor: float = 1.0,
-        reward_weights: np.ndarray | torch.Tensor | list | None = None,
-        reward_calibration: np.ndarray | torch.Tensor | list | None = None,
-        cumulative_reward: bool = True,
+            self,
+            reward_obj_list: list[CalcReward] | None,
+            discount_factor: float = 1.0,
+            reward_weights: np.ndarray | torch.Tensor | list | None = None,
+            reward_calibration: np.ndarray | torch.Tensor | list | None = None,
+            cumulative_reward: bool = True,
     ):
         """Initialize reward aggregator.
 
@@ -73,6 +73,8 @@ class Rewards:
         else:
             self._reward_calibration = reward_calibration
 
+        self._reward_initial_weights = self._reward_weights.clone()
+
         self.reset()
 
     def calc_reward(self, env: BioEnv) -> None:
@@ -83,7 +85,10 @@ class Rewards:
         """
         rewards = [obj.calc_reward(env) for obj in self._reward_obj_list]
         reward_tensor = torch.tensor(rewards, dtype=torch.float32)
-        self.episode_rewards.add_(reward_tensor)
+        if self._cumulative_reward:
+            self.episode_rewards.add_(reward_tensor)
+        else:
+            self.episode_rewards = reward_tensor
         self.episode_reward_history.append(rewards)
 
     def reset(self) -> None:
@@ -93,8 +98,10 @@ class Rewards:
         for obj in self._reward_obj_list:
             obj.reset()
 
+        self._reward_weights = self._reward_initial_weights.clone()
+
     def set_multipliers(
-        self, multipliers: np.ndarray | torch.Tensor | list, verbose: bool = False
+            self, multipliers: np.ndarray | torch.Tensor | list, verbose: bool = False
     ) -> None:
         self._reward_calibration = torch.ones(len(self._reward_obj_list)) * multipliers
         if verbose:

@@ -27,7 +27,7 @@ class GlobalBudgetManager:
 
     def get_step_context(self, env) -> dict:
         remaining = self.total_target - int(env.protected_cells_mask.sum().item())
-        n_cells = min(self.cells_per_time_step, remaining)
+        n_cells = min(self.cells_per_step, remaining)
         return {"n_cells": n_cells, "done": n_cells == 0}
 
     def get_info(self, env) -> dict:

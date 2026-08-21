@@ -406,9 +406,10 @@ def load_spatial_data(
         n_time_steps: int | None = None,
         min_threshold: float | np.ndarray | torch.Tensor | None = None,
         nan_to_num: bool = True,
+        select_channel: int | None = None,
 ) -> SpatialData:
     maps, names = data_loader.load_map(
-        file, clip_min=lower_bound, clip_max=upper_bound, nan_to_num=nan_to_num
+        file, clip_min=lower_bound, clip_max=upper_bound, nan_to_num=nan_to_num, select_channel=select_channel
     )
     if future_file is not None:
         maps_future, names_future = data_loader.load_map(
@@ -416,6 +417,7 @@ def load_spatial_data(
             clip_min=lower_bound,
             clip_max=upper_bound,
             nan_to_num=nan_to_num,
+            select_channel=select_channel,
         )
 
         # Calculate per-step change in habitat suitability

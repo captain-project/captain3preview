@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 def compute_evolutionary_update(
-        results: list[tuple[dict, float]],
-        epoch_coeff: np.ndarray,
-        noise: np.ndarray,
-        alpha: float,
-        sigma: float,
-        running_reward: float | None,
+    results: list[tuple[dict, float]],
+    epoch_coeff: np.ndarray,
+    noise: np.ndarray,
+    alpha: float,
+    sigma: float,
+    running_reward: float | None,
 ) -> np.ndarray:
     """Compute evolution strategies weight update.
 
@@ -118,13 +118,13 @@ class EvolStrategiesTrainer:
     """
 
     def __init__(
-            self,
-            list_of_env_params: list[EpisodeRunner],
-            initial_coeffs: np.ndarray,
-            scheduler: sched.LearningScheduler | None = None,
-            epsilon_reward: float = 0.5,
-            n_perturbations: int | None = None,
-            seed: int | None = None,
+        self,
+        list_of_env_params: list[EpisodeRunner],
+        initial_coeffs: np.ndarray,
+        scheduler: sched.LearningScheduler | None = None,
+        epsilon_reward: float = 0.5,
+        n_perturbations: int | None = None,
+        seed: int | None = None,
     ):
         """Initialize trainer.
 
@@ -194,7 +194,7 @@ class EvolStrategiesTrainer:
             _runner.rewards.set_multipliers(multipliers, verbose=verbose)
 
     def get_reward_calibrated_weights(
-            self, n_probes: int = 20, target_std: float = 1.0, verbose: bool = False
+        self, n_probes: int = 20, target_std: float = 1.0, verbose: bool = False
     ) -> np.ndarray:
         """
         Heuristic Reward Scaling (or Calibration)
@@ -207,7 +207,7 @@ class EvolStrategiesTrainer:
         # Some probes are small tweaks, some are larger explorations
         probe_params = []
         for i in range(n_probes):
-            scale = 0.01 if i < (n_probes // 2) else 0.2
+            scale = 0.05 if i < (n_probes // 2) else 0.25
             probe_params.append(
                 self.epoch_coeff + np.random.randn(len(self.epoch_coeff)) * scale
             )
@@ -236,14 +236,14 @@ class EvolStrategiesTrainer:
 
         if verbose:
             logger.info("Calibration complete. Multipliers: %s", multipliers)
-            logger.debug("Probe component totals: %s", all_component_totals)
-            logger.debug("Means: %s", np.mean(all_component_totals, axis=0))
-            logger.debug("St dev: %s", np.std(all_component_totals, axis=0))
+            logger.info("Probe component totals: %s", all_component_totals)
+            logger.info("Means: %s", np.mean(all_component_totals, axis=0))
+            logger.info("St dev: %s", np.std(all_component_totals, axis=0))
 
         return multipliers
 
     def calibrate_reward_scales(
-            self, multipliers: np.ndarray, verbose: bool = False
+        self, multipliers: np.ndarray, verbose: bool = False
     ) -> None:
         # 4. Update the local worker rewards
         # We use starmap to push these multipliers to the persistent workers
@@ -310,8 +310,8 @@ class EvolStrategiesTrainer:
         # 6. Update baseline (EMA)
         avg_reward = float(np.mean([np.sum(r[1]) for r in results]))
         self.running_reward = (
-                self.epsilon_reward * avg_reward
-                + (1 - self.epsilon_reward) * self.running_reward
+            self.epsilon_reward * avg_reward
+            + (1 - self.epsilon_reward) * self.running_reward
         )
 
         # 7. Summarize

@@ -13,6 +13,7 @@ Requirements:
 - Trained model (provided)
 
 """
+
 import logging
 import warnings
 
@@ -22,6 +23,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 import captain as cn
 
@@ -37,9 +39,8 @@ SEED = None
 # Configuration
 # =============================================================================
 
-# Data paths - UPDATE THESE to point to your data
-DATA_DIR = Path("/path/to/your/captain3data")  # <-- Change this!
-TRAINED_MODEL = Path("/path/to/your/trained_model/trained_weights.npy")  # <-- Change this!
+# Data paths - the repo's own toy dataset, resolved relative to this script
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 PRESENT_SDMS_DIR = "present_sdms"
 FUTURE_SDMS_DIR = "future_sdms"
@@ -50,19 +51,47 @@ COST_FILE = "env_layers/cost.tif"
 FUTURE_COST_FILE = "env_layers/future_cost.tif"
 DATA_MASK = "env_layers/area_mask.npy"
 
+# Regional-agent setup - must match the config used to train the model being
+# loaded (see train_policy.py): USE_REGIONAL_AGENTS=True loads a coordinated
+# per-region policy. When False, REGION_ID selects a single global agent
+# (None = unrestricted, or a region NAME to restrict that single agent to
+# just that region).
+USE_REGIONAL_AGENTS = False
+REGION_ID = None
+REGION_FILE = "env_layers/regions.tif"
+REGION_TABLE = "env_layers/regions_tbl.csv"
+REWARD_WEIGHTS = np.array([1.0, 1.0])
+
 # Trained model and policy settings
 N_TIME_STEPS = 50
-TARGET_PROTECTED_CELLS = 17000
+TARGET_PROTECTED_CELLS_FRACTION = 0.10  # Fraction of valid cells to be protected
 CELLS_PER_STEP = 1000
 
 # Species parameters
 AVG_CARRYING_CAPACITY = 100
 DISPERSAL_RATE = 0.5  # can be an array (per-species values)
 DISPERSAL_WINDOW = 3
-MIN_HABITAT_SUITABILITY = 0.05  # can be an array (per-species values)
+MIN_HABITAT_SUITABILITY = None  # Overwritten below by species-specific thresholds
 
-# Output
-RES_DIR = DATA_DIR / "results"
+# Output - locate the trained model using the same directory-naming formula
+# train_policy.py uses for RESULTS_DIR, and write inference outputs into a
+# subfolder of it (so training/inference outputs for a given config stay
+# together and can never drift out of sync).
+if USE_REGIONAL_AGENTS:
+    res_name = "regions"
+elif REGION_ID is None:
+    res_name = "global"
+else:
+    res_name = REGION_ID
+
+MODEL_DIR = DATA_DIR / (
+        res_name
+        + "_w"
+        + "_w".join([str(r) for r in REWARD_WEIGHTS])
+        + f"_p{TARGET_PROTECTED_CELLS_FRACTION}"
+)
+TRAINED_MODEL = MODEL_DIR / "trained_weights.npy"
+RES_DIR = MODEL_DIR / "inference"
 os.makedirs(RES_DIR, exist_ok=True)
 
 LOG_FILE = "training_log.tsv"
@@ -118,6 +147,51 @@ costs = cn.load_spatial_data(
     n_time_steps=N_TIME_STEPS,
 )
 
+# Regional-agent setup: build per-region masks/targets, or a single
+# action_mask restricting a global agent to one region.
+TARGET_PROTECTED_CELLS = int(TARGET_PROTECTED_CELLS_FRACTION * np.nansum(mask))
+
+if USE_REGIONAL_AGENTS:
+    tmp, _ = cn.data_loader.load_map(DATA_DIR / REGION_FILE)
+    region_tbl = pd.read_csv(DATA_DIR / REGION_TABLE)
+
+    regional_totals, per_step_regional_targets, region_masks = {}, {}, {}
+    for region_num, name in zip(region_tbl["REGION_ID"], region_tbl["NAME"]):
+        r_mask = cn.SpatialData(
+            data=tmp == region_num, mask=mask, lower_bound=0, upper_bound=1
+        )
+        target = int(TARGET_PROTECTED_CELLS_FRACTION * r_mask.data.sum())
+        regional_totals[name] = target
+        per_step_regional_targets[name] = int(
+            CELLS_PER_STEP * (r_mask.data.sum() / np.nansum(mask))
+        )
+        region_masks[name] = r_mask._nonzero_cells_mask
+        print(
+            f"Region {region_num} ({name}): size={r_mask.data.sum()}, "
+            f"target={target}, per_step={per_step_regional_targets[name]}"
+        )
+
+    region_mask = None  # regional mode does not restrict env.action_mask
+
+elif REGION_ID is None:
+    region_mask = None
+
+else:
+    tmp, _ = cn.data_loader.load_map(DATA_DIR / REGION_FILE)
+    region_tbl = pd.read_csv(DATA_DIR / REGION_TABLE)
+    match = region_tbl.loc[region_tbl["NAME"] == REGION_ID, "REGION_ID"]
+    if match.empty:
+        raise ValueError(f"REGION_ID {REGION_ID!r} not found in {REGION_TABLE}")
+    region_num = match.iloc[0]
+
+    region_mask = cn.SpatialData(
+        data=tmp != region_num, mask=mask, lower_bound=0, upper_bound=1
+    )
+    TARGET_PROTECTED_CELLS = int(
+        TARGET_PROTECTED_CELLS_FRACTION * (1 - region_mask.data).sum()
+        + protection.data.sum()
+    )
+
 # Load species traits
 traits = cn.data_loader.load_trait_table(
     DATA_DIR / SPECIES_TRAIT_FILE,
@@ -125,6 +199,10 @@ traits = cn.data_loader.load_trait_table(
     ref_column="species",
     fill_gaps=True,
 )
+
+# Per-species minimum habitat suitability (must match training)
+sdm.reset_threshold(traits["min_habitat_suitability"].to_numpy())
+
 # extract parameters for simulation
 sensitivity = traits["sensitivity_disturbance"].to_numpy(copy=True)[:, np.newaxis]
 growth_rates = traits["growth_rate"].to_numpy(copy=True) + 1.0
@@ -163,6 +241,7 @@ env = cn.BioEnv(
     sensitivity_rates=sensitivity,
     cached_dispersal_matrix=dispersal_matrix,
     ext_risk=ext_risk,
+    action_mask=region_mask,  # None, or restricts actions to one region
 )
 
 # Create agent components
@@ -178,18 +257,27 @@ if PLOT_DATA:
 env.ext_risk.species_per_class(env.current_ext_risk)
 
 model = cn.CellNN(input_dim=feature_extractor.n_features, hidden_dim=16)
-policy = cn.PolicyNetwork(model, seed=SEED)
+if USE_REGIONAL_AGENTS:
+    policy = cn.RegionalPolicyNetwork(model, seed=SEED)
+else:
+    policy = cn.PolicyNetwork(model, seed=SEED)
 policy.set_flat_weights(np.load(TRAINED_MODEL))
 
 rewards = cn.NoRewards()
 
 # Create episode runner
-# global manager (can be focused on individual regions)
-budget_manager = cn.GlobalBudgetManager(
-    total_target=TARGET_PROTECTED_CELLS,
-    cells_per_time_step=CELLS_PER_STEP,
-    feature_updates_per_time_step=1,
-)
+if USE_REGIONAL_AGENTS:
+    budget_manager = cn.RegionalBudgetManager(
+        masks=region_masks,
+        total_targets=regional_totals,
+        cells_per_time_step=per_step_regional_targets,
+    )
+else:
+    budget_manager = cn.GlobalBudgetManager(
+        total_target=TARGET_PROTECTED_CELLS,
+        cells_per_time_step=CELLS_PER_STEP,
+        feature_updates_per_time_step=1,
+    )
 
 ep = cn.EpisodeRunner(
     env=env,
@@ -251,22 +339,31 @@ cn.plots.plot_extinction_risk(
 )
 
 # run without protection for comparison
-ep = cn.EpisodeRunner(
-    env=env,
-    feature_extractor=feature_extractor,
-    policy_network=policy,
-    rewards=rewards,
-    n_steps=N_TIME_STEPS,
-    budget_manager=cn.NoBudgetManager(),
-    save_protection_history=True,
-)
+# (NoBudgetManager's step context isn't compatible with RegionalPolicyNetwork,
+# which requires region_masks/region_k rather than n_cells, so skip this
+# comparison run in "All"-regions mode.)
+if not USE_REGIONAL_AGENTS:
+    ep = cn.EpisodeRunner(
+        env=env,
+        feature_extractor=feature_extractor,
+        policy_network=policy,
+        rewards=rewards,
+        n_steps=N_TIME_STEPS,
+        budget_manager=cn.NoBudgetManager(),
+        save_protection_history=True,
+    )
 
-res, _ = ep.run_episode(np.load(TRAINED_MODEL))
+    res, _ = ep.run_episode(np.load(TRAINED_MODEL))
 
-cn.plots.plot_extinction_risk(
-    env.current_ext_risk,
-    labels=["LC", "NT", "VU", "EN", "CR"],
-    outfile=RES_DIR / "Extinction_risk_future_no_protection",
-    title="Future extinction risk (no protection)",
-    dpi=200,
-)
+    cn.plots.plot_extinction_risk(
+        env.current_ext_risk,
+        labels=["LC", "NT", "VU", "EN", "CR"],
+        outfile=RES_DIR / "Extinction_risk_future_no_protection",
+        title="Future extinction risk (no protection)",
+        dpi=200,
+    )
+else:
+    print(
+        "Skipping no-protection comparison run in regional multi-agent mode "
+        "(RegionalPolicyNetwork requires region_masks/region_k, not n_cells)."
+    )

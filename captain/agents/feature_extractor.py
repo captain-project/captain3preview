@@ -46,15 +46,16 @@ class FeatureExtractor:
     DEFAULT_TIME_RESCALE: float = 10.0
 
     def __init__(
-        self,
-        env: BioEnv,
-        feature_set: list[str] | None = None,
-        trait_features: list[str] | None = None,  # <- not fully implemented
-        static_features: np.ndarray | torch.Tensor | None = None,
-        convolution: int = 5,
-        keys_to_reset: list[str] | None = None,
-        time_rescale: float = DEFAULT_TIME_RESCALE,
-        device: torch.device | str | None = None,
+            self,
+            env: BioEnv,
+            feature_set: list[str] | None = None,
+            trait_features: list[str] | None = None,  # <- not fully implemented
+            static_features: np.ndarray | torch.Tensor | None = None,
+            static_features_names: list[str] | None = None,
+            convolution: int = 5,
+            keys_to_reset: list[str] | None = None,
+            time_rescale: float = DEFAULT_TIME_RESCALE,
+            device: torch.device | str | None = None,
     ):
         """Initialize feature extractor.
 
@@ -80,7 +81,7 @@ class FeatureExtractor:
         if "current_ext_risk" in self._feature_set:
             risk_names = [f"ext_risk_{i}" for i in range(env.ext_risk._n_classes)]
             idx = self._feature_set.index("current_ext_risk")
-            self._feature_names[idx : idx + 1] = risk_names
+            self._feature_names[idx: idx + 1] = risk_names
             self._n_risk_classes = env.ext_risk._n_classes
         else:
             self._n_risk_classes = 0
@@ -94,9 +95,12 @@ class FeatureExtractor:
 
         if isinstance(static_features, (np.ndarray, torch.Tensor)):
             self._static_features = torch.as_tensor(static_features).to(self.device)
-            self._feature_names = self._feature_names + [
-                f"static_{k}" for k in range(self._static_features.size(0))
-            ]
+            if static_features_names is None:
+                self._feature_names = self._feature_names + [
+                    f"static_{k}" for k in range(self._static_features.size(0))
+                ]
+            else:
+                self._feature_names = self._feature_names + static_features_names
         else:
             self._static_features = None
 
@@ -140,6 +144,66 @@ class FeatureExtractor:
 
         # Initialize rescaler
         self.set_rescaler(env)
+
+    def reset_static_features(
+            self,
+            static_features: np.ndarray | torch.Tensor,
+            indices: int | list[int] | np.ndarray | torch.Tensor | None = None,
+    ) -> None:
+        """
+        Resets all or a subset of static features.
+
+        Args:
+            static_features: The new feature values (array or tensor).
+            indices: A single index or collection of indices pointing to the channels
+                     to update. If None, the entire feature matrix is reset.
+        """
+        # 1. Convert incoming features to a PyTorch tensor on the correct device/dtype
+        new_features = torch.as_tensor(
+            static_features, device=self.device, dtype=self._static_features.dtype
+        )
+
+        # Case A: Full Reset (No indices provided)
+        if indices is None:
+            if self._static_features.shape != new_features.shape:
+                raise ValueError(
+                    f"Shape mismatch for full reset. "
+                    f"Expected {self._static_features.shape}, got {new_features.shape}."
+                )
+            # Using .copy_() performs an in-place update. This is much safer than
+            # reassignment because it preserves memory references if other parts of
+            # your code are pointing to self._static_features.
+            self._static_features.copy_(new_features)
+            return
+
+        # Case B: Single Index (e.g., resetting just channel 0)
+        if isinstance(indices, (int, np.integer)):
+            target_shape = self._static_features[indices].shape
+
+            # If they passed a flat 1D array for a single slice, try to automatically
+            # reshape/unsqueeze it to match the target slice shape.
+            if new_features.shape != target_shape:
+                try:
+                    new_features = new_features.view(target_shape)
+                except RuntimeError:
+                    raise ValueError(
+                        f"Cannot cast incoming shape {new_features.shape} to match "
+                        f"the target channel slice shape {target_shape}."
+                    )
+            self._static_features[indices] = new_features
+
+        # Case C: Multiple Indices (e.g., resetting channels [0, 2, 5])
+        else:
+            # Convert indices cleanly to a PyTorch LongTensor on the correct device
+            idx_tensor = torch.as_tensor(indices, dtype=torch.long, device=self.device)
+            target_shape = self._static_features[idx_tensor].shape
+
+            if new_features.shape != target_shape:
+                raise ValueError(
+                    f"Shape mismatch for indices {indices}. "
+                    f"Expected shape {target_shape}, got {new_features.shape}."
+                )
+            self._static_features[idx_tensor] = new_features
 
     @property
     def n_features(self) -> int:
@@ -250,7 +314,7 @@ class FeatureExtractor:
 
         if self._static_features is not None:
             # add static features
-            obs[-self._static_features.size(0) :] = self._static_features
+            obs[-self._static_features.size(0):] = self._static_features
 
         return obs
 
@@ -299,11 +363,11 @@ class FeatureExtractor:
         self._rescaler_mean[self._features_to_reset] = 0.0
 
     def plot_features(
-        self,
-        env: BioEnv,
-        rescale: bool = True,
-        outdir: str | Path | None = None,
-        figsize=(5, 6),
+            self,
+            env: BioEnv,
+            rescale: bool = True,
+            outdir: str | Path | None = None,
+            figsize=(5, 6),
     ) -> None:
         """Plot all features as spatial grids.
 

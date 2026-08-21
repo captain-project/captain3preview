@@ -3,12 +3,65 @@ import rasterio
 import torch
 from scipy import sparse
 from scipy.sparse import csr_matrix
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree, cKDTree
 from sklearn.neighbors import NearestNeighbors
 
 
+class DistanceFromTarget:
+
+    def __init__(self, coords: tuple, target_cell_mask: torch.Tensor):
+        y_coords = np.asarray(coords[0])
+        x_coords = np.asarray(coords[1])
+        self.coords = np.stack([y_coords, x_coords], axis=1)
+
+        # 1. Store the target mask as a 1D numpy array so we can reference it later
+        self.target_mask_np = target_cell_mask.view(-1).cpu().numpy()
+        self.coords_target = self.coords[self.target_mask_np]  # Shape: (N_targets, 2)
+
+    def calculate_min_distances(
+            self, valid_cell_mask: torch.Tensor, normalize: bool = False
+    ) -> torch.Tensor:
+        # 2. Flatten the input mask to 1D internally
+        valid_cell_mask_1d = valid_cell_mask.view(-1)
+        valid_mask_np = valid_cell_mask_1d.cpu().numpy()
+
+        # 3. EXCLUSION STEP: Filter out target cells from the valid mask
+        # calc_mask_np is True ONLY for cells that are valid AND NOT targets
+        calc_mask_np = valid_mask_np & ~self.target_mask_np
+
+        # 4. Extract coordinates ONLY for the non-overlapping valid cells
+        coords_calc = self.coords[calc_mask_np]  # Shape: (N_calc, 2)
+
+        # 5. Handle safety edge cases
+        if len(self.coords_target) == 0 or len(coords_calc) == 0:
+            calc_distances = np.full(len(coords_calc), np.inf)
+        else:
+            tree = KDTree(self.coords_target)
+            # Query closest target ONLY for non-overlapping cells
+            calc_distances, _ = tree.query(coords_calc)
+
+        if normalize and len(calc_distances) > 0:
+            max_dist = np.nanmax(calc_distances)
+            if max_dist > 0:
+                calc_distances /= max_dist
+
+        # 6. Initialize a 1D result tensor filled with NaNs
+        result_1d = torch.full_like(
+            valid_cell_mask_1d, float("nan"), dtype=torch.float32
+        )
+
+        # 7. Assign calculated distances ONLY to non-overlapping valid slots
+        # Overlapping cells (and invalid cells) remain as NaN
+        result_1d[calc_mask_np] = (
+            torch.from_numpy(calc_distances).float().to(valid_cell_mask.device)
+        )
+
+        # 8. Restore original input tensor shape
+        return result_1d.view(valid_cell_mask.shape)
+
+
 def dispersal_distances_threshold_coords_kdtree(
-    lambda_0: float, coords: tuple, threshold=3
+        lambda_0: float, coords: tuple, threshold=3
 ):
     lat_flat = np.asarray(coords[0])
     lon_flat = np.asarray(coords[1])
@@ -47,8 +100,8 @@ def dispersal_distances_threshold_coords_kdtree(
 
 
 def scipy_sparse_to_torch(
-    sparse_matrix: csr_matrix,
-    device: torch.device,
+        sparse_matrix: csr_matrix,
+        device: torch.device,
 ) -> torch.Tensor:
     """Convert scipy CSR sparse matrix to PyTorch sparse CSR tensor.
 
@@ -86,7 +139,7 @@ def dispersal_distances_threshold_coords(lambda_0: float, coords: tuple, thresho
 
 
 def save_dispersal_distances(
-    lambda_0: float, coords: tuple, threshold=3, filename: str | None = None
+        lambda_0: float, coords: tuple, threshold=3, filename: str | None = None
 ):
     m = dispersal_distances_threshold_coords(lambda_0, coords, threshold)
     if filename is None:
@@ -147,7 +200,7 @@ def reconstruct_grid(data_2d, coords, original_spatial_shape):
 
 
 def compute_convolution_matrix(
-    coords: tuple[np.ndarray, np.ndarray], radius: int = 2
+        coords: tuple[np.ndarray, np.ndarray], radius: int = 2
 ) -> csr_matrix:
     """Compute a row-normalized sparse convolution matrix for spatial averaging.
 
@@ -189,14 +242,14 @@ def compute_convolution_matrix(
 
 
 def calculate_delta(
-    map_present: np.ndarray, map_future: np.ndarray, n_steps: int | float
+        map_present: np.ndarray, map_future: np.ndarray, n_steps: int | float
 ):
     delta = (map_future - map_present) / n_steps
     return delta
 
 
 def extract_regional_centroids(
-    tif_path: str, normalize: bool = True, device: str | torch.device = "cpu"
+        tif_path: str, normalize: bool = True, device: str | torch.device = "cpu"
 ) -> torch.Tensor:
     """Reads a region map TIFF and returns a 3D PyTorch tensor of regional centroids.
 

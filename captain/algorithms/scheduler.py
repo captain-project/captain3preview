@@ -54,6 +54,8 @@ class LearningScheduler:
     # Current values (set in post_init)
     alpha: float = field(init=False)
     sigma: float = field(init=False)
+    # Add a boolean option to lock sigma in place
+    fixed_sigma: bool = False
 
     def __post_init__(self):
         """Initialize current values."""
@@ -62,15 +64,16 @@ class LearningScheduler:
 
     def step(self, jaccard_indx: None | float = None) -> None:
         """Apply one step of decay. Call at end of each epoch."""
-        if jaccard_indx is not None:
-            if jaccard_indx > self.target_iou_max:
-                # Solutions are too similar -> Increase exploration
-                self.sigma *= 1.0 + ADAPTATION_RATE
-            elif jaccard_indx < self.target_iou_min:
-                # Solutions are too chaotic -> Decrease noise
-                self.sigma *= 1.0 - ADAPTATION_RATE
-        else:
-            self.sigma = max(self.sigma * self.sigma_decay, self.min_sigma)
+        if not self.fixed_sigma:
+            if jaccard_indx is not None:
+                if jaccard_indx > self.target_iou_max:
+                    # Solutions are too similar -> Increase exploration
+                    self.sigma *= 1.0 + ADAPTATION_RATE
+                elif jaccard_indx < self.target_iou_min:
+                    # Solutions are too chaotic -> Decrease noise
+                    self.sigma *= 1.0 - ADAPTATION_RATE
+            else:
+                self.sigma = max(self.sigma * self.sigma_decay, self.min_sigma)
 
         self.alpha = max(self.alpha * self.alpha_decay, self.min_alpha)
 
@@ -94,6 +97,7 @@ class LearningScheduler:
             "sigma_decay": self.sigma_decay,
             "min_alpha": self.min_alpha,
             "min_sigma": self.min_sigma,
+            "fixed_sigma": self.fixed_sigma,  # Added to state
         }
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
@@ -110,3 +114,5 @@ class LearningScheduler:
         self.sigma_decay = state["sigma_decay"]
         self.min_alpha = state["min_alpha"]
         self.min_sigma = state["min_sigma"]
+        # .get() guarantees backwards compatibility with older checkpoints
+        self.fixed_sigma = state.get("fixed_sigma", False)

@@ -12,18 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 def plot_grid(
-        data,
-        mask=None,
-        title=None,
-        outfile=None,
-        cmap="YlGnBu",
-        background="lightgrey",
-        zero_color="white",
-        rescale_figure: float = 1.0,
-        dpi: int = 100,
-        figsize=(5, 6),
-        vmin=None,
-        vmax=None,
+    data,
+    mask=None,
+    title=None,
+    outfile=None,
+    cmap="YlGnBu",
+    background="lightgrey",
+    zero_color="white",
+    rescale_figure: float = 1.0,
+    dpi: int = 100,
+    figsize=(5, 6),
+    vmin=None,
+    vmax=None,
 ):
     # 1. Prepare Data
     plot_data = np.array(data).copy()
@@ -123,12 +123,12 @@ def create_gif(png_files, duration_ms=100, rm_png=False):
 
 
 def plot_extinction_risk(
-        data,
-        labels,
-        title="Conservation Status Distribution",
-        outfile=None,
-        dpi=100,
-        ymax=None,
+    data,
+    labels,
+    title="Conservation Status Distribution",
+    outfile=None,
+    dpi=100,
+    ymax=None,
 ):
     """
     Plots a bar chart of conservation status counts.
@@ -200,19 +200,29 @@ def plot_extinction_risk(
 
 
 def plot_rl_rewards(
-        file_path,
-        start_span=30,
-        end_span=1000,
-        title="RL training rewards",
-        outfile=None,
-        dpi=300,
+    file_path,
+    start_span=None,
+    end_span=None,
+    title="RL training rewards",
+    outfile=None,
+    dpi=300,
+    reward_col="reward",
 ):
     df = pd.read_csv(file_path, sep="\t")
-    rewards = df["reward"].values
+    rewards = df[reward_col].values
     epochs = np.arange(len(rewards))
 
     # 1. Define your span range
-    # Start with a small span (very reactive) and grow to a larger one (very smooth)
+    # Start with a small span (very reactive) and grow to a larger one (very smooth).
+    # Defaults scale with the number of epochs so the EMA can actually catch up
+    # to the raw reward by the end of the run: fixed defaults tuned for long
+    # (hundreds+ epoch) runs leave alpha too small to track short runs (e.g. a
+    # 20-epoch smoke test), making the smoothed line trail well below the raw
+    # reward instead of converging to it.
+    if start_span is None:
+        start_span = max(2, min(30, len(rewards) // 4))
+    if end_span is None:
+        end_span = max(start_span + 1, len(rewards))
 
     # 2. Create an array of alphas that decrease over time
     # (Since larger span = smaller alpha = more smoothing)
