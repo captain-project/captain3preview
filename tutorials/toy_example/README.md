@@ -145,6 +145,12 @@ With the toy data and `XAI_SAMPLE_FRACTION = 0.05`, each step file is about
 [`docs/inference.md`](../../docs/inference.md) for the full list of saved
 arrays and how to load them.
 
+With `PLOT_XAI = True`, the script also saves
+`step_{t:03d}_u00_features_vs_scores.png` next to each step file: one scatter
+plot per feature, with the feature value against the policy score and
+selected cells highlighted. It's a quick first look at which features the
+policy's ranking follows.
+
 ## 2. Global vs. regional agents
 
 Both scripts share two config constants that control the agent setup:

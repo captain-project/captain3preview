@@ -104,6 +104,7 @@ XAI_STEPS = "all"  # "all", or a list of time steps, e.g. [0] for the initial ra
 # None = save features for all cells; e.g. 0.05 = save features only for the top
 # max(5%, selected) eligible cells plus an equally sized random sample of the rest
 XAI_SAMPLE_FRACTION = 0.05
+PLOT_XAI = True  # scatter plots of each feature vs policy score, for each saved step
 
 # =============================================================================
 # Episode Setup Function
@@ -273,6 +274,13 @@ policy.set_flat_weights(np.load(TRAINED_MODEL))
 
 rewards = cn.NoRewards()
 
+# Optional recorder of features, scores and rankings for xAI analyses
+xai_recorder = None
+if SAVE_XAI_DATA:
+    xai_recorder = cn.InferenceRecorder(
+        RES_DIR / "xai", steps=XAI_STEPS, feature_sample_fraction=XAI_SAMPLE_FRACTION, seed=SEED
+    )
+
 # Create episode runner
 if USE_REGIONAL_AGENTS:
     budget_manager = cn.RegionalBudgetManager(
@@ -295,9 +303,7 @@ ep = cn.EpisodeRunner(
     n_steps=N_TIME_STEPS,
     budget_manager=budget_manager,
     save_protection_history=True,
-    recorder=cn.InferenceRecorder(
-        RES_DIR / "xai", steps=XAI_STEPS, feature_sample_fraction=XAI_SAMPLE_FRACTION, seed=SEED
-    ) if SAVE_XAI_DATA else None,
+    recorder=xai_recorder,
 )
 
 res, _ = ep.run_episode(np.load(TRAINED_MODEL))
@@ -348,6 +354,13 @@ cn.plots.plot_extinction_risk(
     title="Future extinction risk (protection)",
     dpi=200,
 )
+
+# plot features vs policy scores at each recorded decision
+if xai_recorder is not None and PLOT_XAI:
+    for step_file in xai_recorder.files:
+        cn.plots.plot_feature_scores_from_file(
+            step_file, outfile=step_file.with_name(step_file.stem + "_features_vs_scores.png")
+        )
 
 # run without protection for comparison
 # (NoBudgetManager's step context isn't compatible with RegionalPolicyNetwork,

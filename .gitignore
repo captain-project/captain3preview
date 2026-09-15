@@ -1,0 +1,6 @@
+__pycache__/
+.DS_Store
+
+# Data directory (cloned separately, top-level only)
+/data/
+/.idea/

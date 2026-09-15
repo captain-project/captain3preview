@@ -85,6 +85,9 @@ class InferenceRecorder:
       agents only.
     - ``time_step``, ``update_idx``: decision indices.
 
+    The paths of the step files written in the last episode are listed in ``files``
+    (e.g. to plot them with ``plots.plot_feature_scores_from_file``).
+
     A single ``cells.npz`` holds the grid coordinates of each cell
     (``coords_row``, ``coords_col``), ``grid_shape``, ``feature_names`` and, for
     regional agents, ``region_names``.
@@ -163,6 +166,7 @@ class InferenceRecorder:
         self._n_files = 0
         self._cells_written = False
         self._rng = np.random.default_rng(self.seed)
+        self.files: list[Path] = []
 
     def should_record(self, t: int) -> bool:
         """Whether decisions at time step ``t`` should be recorded."""
@@ -307,7 +311,9 @@ class InferenceRecorder:
             self._save(self.out_dir / self.CELLS_FILE, **cells)
             self._cells_written = True
 
-        self._save(self.out_dir / f"step_{t:03d}_u{update_idx:02d}.npz", **arrays)
+        step_file = self.out_dir / f"step_{t:03d}_u{update_idx:02d}.npz"
+        self._save(step_file, **arrays)
+        self.files.append(step_file)
         self._recorded_steps.add(t)
         self._n_files += 1
 

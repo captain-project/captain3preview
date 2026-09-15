@@ -90,6 +90,30 @@ regional agents, `region_names`.
 > **Note:** once the protection budget is exhausted the policy is no longer queried, so later
 > time steps produce no files. A warning lists any requested steps without a decision.
 
+## Plotting features vs scores
+
+`plots.plot_feature_scores_from_file` draws one scatter plot per feature, with the feature value
+on the x axis and the policy score on the y axis. Selected cells are in orange and cells that
+were not selected in blue. Only cells that could be selected are shown: all eligible cells, or
+the sampled cells when subsampling is on (the random group is not reweighted in the plot).
+Features with at most 10 distinct values get a small horizontal jitter, and features that are
+constant at that step are marked "(constant)".
+
+```python
+from captain.utils import plots
+
+for step_file in recorder.files:  # step files written in the last episode
+    plots.plot_feature_scores_from_file(
+        step_file, outfile=step_file.with_name(step_file.stem + "_features_vs_scores.png")
+    )
+```
+
+`use_raw=False` plots the normalized network inputs instead of raw values. For arrays that
+didn't come from a recorder file, use `plots.plot_feature_scores(features, scores, selected,
+feature_names)`. With many cells, `max_points` (default 20,000) randomly thins the non-selected
+cells; selected cells are always drawn. In `examples/run_inference.py` the plots are controlled
+by `PLOT_XAI`.
+
 ## Mapping back to the grid
 
 ```python

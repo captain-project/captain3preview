@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 
 import matplotlib.pyplot as plt
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
+from matplotlib.lines import Line2D
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -257,3 +259,190 @@ def plot_rl_rewards(
         plt.show()
 
     plt.close()
+
+
+# Colors for feature-vs-score plots (validated as a 2-slot categorical palette)
+_NOT_SELECTED_COLOR = "#2a78d6"
+_SELECTED_COLOR = "#eb6834"
+_SURFACE_COLOR = "#fcfcfb"
+_INK_COLOR = "#0b0b0b"
+_INK_SECONDARY_COLOR = "#52514e"
+_GRID_COLOR = "#e1e0d9"
+_AXIS_COLOR = "#c3c2b7"
+
+
+def plot_feature_scores(
+    features,
+    scores,
+    selected,
+    feature_names=None,
+    title=None,
+    outfile=None,
+    ncols: int = 4,
+    max_points: int | None = 20000,
+    jitter_discrete: bool = True,
+    seed: int = 0,
+    dpi: int = 150,
+    panel_size=(2.8, 2.3),
+):
+    """Scatter plots of each feature against the policy score, colored by selection.
+
+    One panel per feature (shared y axis). Cells not selected are drawn first,
+    selected cells on top.
+
+    Args:
+        features: Feature values of shape (n_features, n_cells).
+        scores: Policy scores of shape (n_cells,).
+        selected: Boolean mask of shape (n_cells,), True for selected cells.
+        feature_names: Names of the features (default: ``feature_{k}``).
+        title: Figure title.
+        outfile: Path to save the figure. If None, it calls plt.show().
+        ncols: Maximum number of panels per row.
+        max_points: Maximum number of points drawn per panel. Non-selected cells are
+            randomly subsampled to stay within the limit; selected cells are always
+            drawn. None draws all cells.
+        jitter_discrete: If True, add small horizontal jitter to features with at most
+            10 distinct values, to reduce overplotting.
+        seed: Seed for point subsampling and jitter.
+        dpi: Resolution of the saved figure.
+        panel_size: (width, height) of each panel in inches.
+
+    Raises:
+        ValueError: If array shapes are inconsistent.
+    """
+    features = features.detach().cpu().numpy() if torch.is_tensor(features) else features
+    scores = scores.detach().cpu().numpy() if torch.is_tensor(scores) else scores
+    selected = selected.detach().cpu().numpy() if torch.is_tensor(selected) else selected
+    features = np.asarray(features, dtype=float)
+    scores = np.asarray(scores, dtype=float)
+    selected = np.asarray(selected, dtype=bool)
+
+    if features.ndim != 2 or features.shape[1] != scores.shape[0]:
+        raise ValueError(
+            f"features must have shape (n_features, n_cells) matching scores {scores.shape}, "
+            f"got {features.shape}"
+        )
+    if selected.shape != scores.shape:
+        raise ValueError(f"selected shape {selected.shape} does not match scores {scores.shape}")
+
+    n_features = features.shape[0]
+    if feature_names is None:
+        feature_names = [f"feature_{k}" for k in range(n_features)]
+
+    rng = np.random.default_rng(seed)
+    sel_idx = np.flatnonzero(selected)
+    not_sel_idx = np.flatnonzero(~selected)
+    n_selected, n_not_selected = sel_idx.size, not_sel_idx.size
+    if max_points is not None and n_selected + n_not_selected > max_points:
+        n_keep = min(max(max_points - n_selected, 0), n_not_selected)
+        not_sel_idx = np.sort(rng.choice(not_sel_idx, size=n_keep, replace=False))
+
+    ncols = max(1, min(ncols, n_features))
+    nrows = math.ceil(n_features / ncols)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(panel_size[0] * ncols, panel_size[1] * nrows),
+        sharey=True,
+        squeeze=False,
+        facecolor=_SURFACE_COLOR,
+        layout="constrained",
+    )
+
+    for i, ax in enumerate(axes.flat):
+        if i >= n_features:
+            ax.set_visible(False)
+            continue
+
+        x = features[i]
+        values = np.unique(x)
+        if jitter_discrete and 1 < values.size <= 10:
+            x = x + rng.uniform(-0.15, 0.15, size=x.size) * np.diff(values).min()
+
+        ax.scatter(
+            x[not_sel_idx], scores[not_sel_idx], s=4, color=_NOT_SELECTED_COLOR,
+            alpha=0.35, linewidths=0, rasterized=True,
+        )
+        ax.scatter(
+            x[sel_idx], scores[sel_idx], s=6, color=_SELECTED_COLOR,
+            alpha=0.8, linewidths=0, rasterized=True,
+        )
+
+        name = str(feature_names[i])
+        if values.size == 1:
+            name += " (constant)"
+            ax.set_xticks(values)
+        ax.set_title(name, fontsize=9, color=_INK_COLOR, loc="left")
+        ax.set_facecolor(_SURFACE_COLOR)
+        ax.grid(color=_GRID_COLOR, linewidth=0.6)
+        ax.set_axisbelow(True)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.spines[["left", "bottom"]].set_color(_AXIS_COLOR)
+        ax.tick_params(colors=_AXIS_COLOR, labelcolor=_INK_SECONDARY_COLOR, labelsize=7)
+        if i % ncols == 0:
+            ax.set_ylabel("Policy score", fontsize=8, color=_INK_SECONDARY_COLOR)
+
+    handles = [
+        Line2D([], [], marker="o", linestyle="", markersize=6, color=_SELECTED_COLOR,
+               label=f"Selected (n={n_selected:,})"),
+        Line2D([], [], marker="o", linestyle="", markersize=6, color=_NOT_SELECTED_COLOR,
+               label=f"Not selected (n={n_not_selected:,})"),
+    ]
+    fig.legend(
+        handles=handles, loc="outside upper right", ncol=2, frameon=False, fontsize=8,
+        labelcolor=_INK_SECONDARY_COLOR,
+    )
+    if title:
+        fig.suptitle(title, x=0.01, ha="left", fontsize=11, color=_INK_COLOR)
+
+    if outfile:
+        fig.savefig(outfile, dpi=dpi, facecolor=_SURFACE_COLOR)
+        logger.info("Plot saved to %s", outfile)
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_feature_scores_from_file(step_file, use_raw: bool = True, title=None, outfile=None,
+                                  **kwargs):
+    """Plot features vs policy score from a file saved by ``InferenceRecorder``.
+
+    Only cells that could be selected at that decision are plotted: the sampled
+    cells if the recorder used ``feature_sample_fraction``, otherwise all eligible cells.
+
+    Args:
+        step_file: Path to a ``step_*.npz`` file.
+        use_raw: If True, plot raw feature values when available, otherwise the
+            normalized values fed to the network.
+        title: Figure title (default: derived from the time step).
+        outfile: Path to save the figure. If None, it calls plt.show().
+        **kwargs: Passed to ``plot_feature_scores``.
+    """
+    d = np.load(step_file)
+    use_raw = use_raw and "features_raw" in d.files
+    features = d["features_raw"] if use_raw else d["features_input"]
+
+    if "sample_cell_idx" in d.files:
+        idx = d["sample_cell_idx"]
+    else:
+        idx = np.flatnonzero(d["eligible"])
+        features = features[:, idx]
+
+    if title is None:
+        title = f"Features vs policy score, time step {int(d['time_step'])}"
+        if int(d["update_idx"]) > 0:
+            title += f" (update {int(d['update_idx'])})"
+        title += " - raw features" if use_raw else " - network input"
+        if "sample_cell_idx" in d.files:
+            title += " (sampled cells)"
+
+    plot_feature_scores(
+        features,
+        d["scores"][idx],
+        d["selected"][idx],
+        feature_names=d["feature_names"],
+        title=title,
+        outfile=outfile,
+        **kwargs,
+    )
