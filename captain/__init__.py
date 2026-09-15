@@ -33,6 +33,7 @@ from captain.algorithms.budget_manager import (
 # Algorithms
 from captain.algorithms.episode import BridgeEpisodeRunner, EpisodeRunner
 from captain.algorithms.evolution_train import EvolStrategiesTrainer
+from captain.algorithms.inference_recorder import InferenceRecorder
 from captain.algorithms.scheduler import LearningScheduler
 from captain.data.extinction_risk import ExtinctionRisk, ExtinctionRiskStatic
 from captain.data.spatial_data import (
@@ -77,6 +78,7 @@ __all__ = [
     # Algorithms
     "EpisodeRunner",
     "BridgeEpisodeRunner",
+    "InferenceRecorder",
     "EvolStrategiesTrainer",
     "LearningScheduler",
     "TrainingLogger",

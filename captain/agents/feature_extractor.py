@@ -211,6 +211,11 @@ class FeatureExtractor:
         return self._n_features
 
     @property
+    def feature_names(self) -> list[str]:
+        """Feature names, in the order of the feature dimension."""
+        return list(self._feature_names)
+
+    @property
     def default_feature_set(self):
         return [
             "time",

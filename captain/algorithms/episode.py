@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         NoBudgetManager,
         RegionalBudgetManager,
     )
+    from captain.algorithms.inference_recorder import InferenceRecorder
     from captain.environment.bioenv import BioEnv
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class EpisodeRunner:
             n_steps: int = 30,
             verbose: bool = False,
             save_protection_history: bool = False,
+            recorder: InferenceRecorder | None = None,
     ):
         """Initialize episode runner.
 
@@ -72,6 +74,8 @@ class EpisodeRunner:
             n_steps: Total timesteps per episode.
             verbose: If True, print progress.
             save_protection_history: If True, record protection mask each step.
+            recorder: Optional InferenceRecorder saving features, scores and cell
+                      rankings at each policy decision (for xAI analyses).
         """
         self.env = env
         self.feature_extractor = feature_extractor
@@ -82,6 +86,7 @@ class EpisodeRunner:
         self.verbose = verbose
         self.save_protection_history = save_protection_history
         self.protection_history = None
+        self.recorder = recorder
 
     def get_info(self) -> dict[str, Any]:
         """Get episode information.
@@ -114,6 +119,8 @@ class EpisodeRunner:
             self.policy.set_flat_weights(params)
         self.rewards.reset()
         self.protection_history = None
+        if self.recorder is not None:
+            self.recorder.reset()
 
         # Flag to bypass the entire execution loop block once targets are hit
         protection_active = True
@@ -125,7 +132,7 @@ class EpisodeRunner:
             for t in range(self.n_steps):
                 # Optimized Protection phase
                 if protection_active:
-                    for _ in range(self.budget_manager.feature_updates_per_time_step):
+                    for u in range(self.budget_manager.feature_updates_per_time_step):
                         # Check A: What budgets does the manager allow right now?
                         budget_kwargs = self.budget_manager.get_step_context(self.env)
 
@@ -151,6 +158,13 @@ class EpisodeRunner:
                             **budget_kwargs,
                         )
 
+                        # Record inputs/ranking before the action changes the env state
+                        if self.recorder is not None and self.recorder.should_record(t):
+                            self.recorder.record(
+                                t, u, self.env, self.feature_extractor, self.policy,
+                                obs, action, budget_kwargs,
+                            )
+
                         # Update manager tracking and apply to physics matrix
                         if len(action) > 0:
                             self.env.update_protection_matrix(action)
@@ -172,6 +186,9 @@ class EpisodeRunner:
                         f"Rewards: {self.rewards.episode_rewards} | "
                         f"Protected: {int(self.env.protected_cells_mask.sum().item())}"
                     )
+
+        if self.recorder is not None:
+            self.recorder.finalize()
 
         total_reward = self.rewards.get_weighted_reward()
         info = self.get_info()
@@ -205,6 +222,7 @@ class BridgeEpisodeRunner(EpisodeRunner):
             n_steps: int = 30,
             verbose: bool = False,
             save_protection_history: bool = True,
+            recorder: InferenceRecorder | None = None,
     ):
         """Initialize episode runner.
 
@@ -218,6 +236,8 @@ class BridgeEpisodeRunner(EpisodeRunner):
             n_steps: Total timesteps per episode.
             verbose: If True, print progress.
             save_protection_history: If True, record protection mask each step.
+            recorder: Optional InferenceRecorder saving features, scores and cell
+                      rankings at each policy decision (for xAI analyses).
         """
         super().__init__(
             env,
@@ -228,6 +248,7 @@ class BridgeEpisodeRunner(EpisodeRunner):
             n_steps,
             verbose,
             save_protection_history,
+            recorder,
         )
 
         scipy_conv = compute_convolution_matrix(self.env.disturbance._coords, radius=1)
@@ -255,6 +276,8 @@ class BridgeEpisodeRunner(EpisodeRunner):
             self.policy.set_flat_weights(params)
         self.rewards.reset()
         self.protection_history = None
+        if self.recorder is not None:
+            self.recorder.reset()
 
         # Flag to bypass the entire execution loop block once targets are hit
         protection_active = True
@@ -268,7 +291,7 @@ class BridgeEpisodeRunner(EpisodeRunner):
             for t in range(self.n_steps):
                 # Optimized Protection phase
                 if protection_active:
-                    for _ in range(self.budget_manager.feature_updates_per_time_step):
+                    for u in range(self.budget_manager.feature_updates_per_time_step):
                         # Check A: What budgets does the manager allow right now?
                         budget_kwargs = self.budget_manager.get_step_context(self.env)
 
@@ -308,6 +331,13 @@ class BridgeEpisodeRunner(EpisodeRunner):
                             constraint_mask=self.env.no_action_mask,
                             **budget_kwargs,
                         )
+
+                        # Record inputs/ranking before the action changes the env state
+                        if self.recorder is not None and self.recorder.should_record(t):
+                            self.recorder.record(
+                                t, u, self.env, self.feature_extractor, self.policy,
+                                obs, action, budget_kwargs,
+                            )
 
                         # Update manager tracking and apply to physics matrix
                         if len(action) > 0:
@@ -393,6 +423,9 @@ class BridgeEpisodeRunner(EpisodeRunner):
                         f"Rewards: {self.rewards.episode_rewards} | "
                         f"Protected: {int(self.env.protected_cells_mask.sum().item())}"
                     )
+
+        if self.recorder is not None:
+            self.recorder.finalize()
 
         total_reward = self.rewards.get_weighted_reward()
         info = self.get_info()

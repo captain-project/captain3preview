@@ -46,7 +46,7 @@ and edit the constants directly before running.
 |---|---|
 | [`calibrate_rewards.py`](../../examples/calibrate_rewards.py) | One-time step: calibrates reward-term scales against the global agent and saves `reward_calibration.json`. |
 | [`train_policy.py`](../../examples/train_policy.py) | Trains a policy with Evolution Strategies (ES), loading the saved reward calibration. |
-| [`run_inference.py`](../../examples/run_inference.py) | Loads a trained policy and runs one episode, producing protection maps and extinction-risk plots. |
+| [`run_inference.py`](../../examples/run_inference.py) | Loads a trained policy and runs one episode, producing protection maps and extinction-risk plots, and optionally saves features, policy scores and cell rankings for xAI analyses. |
 
 The downloaded `data/` already includes everything these scripts need,
 including a region raster (`env_layers/regions.tif`) and lookup table
@@ -115,6 +115,35 @@ global/regional/single-region runs (see the example below).
    (`NoBudgetManager()`) as a "no protection" baseline for comparison — this
    step is skipped in regional (`"All"`) mode, since it isn't compatible with
    the multi-agent policy.
+
+#### Saving features and rankings for xAI
+
+With `SAVE_XAI_DATA = True`, the episode runner gets an `InferenceRecorder`
+that saves, at every policy decision, what the policy saw and how it ranked
+the cells. The output goes to `inference/xai/` inside the model folder:
+
+- `cells.npz`: each cell's grid coordinates, the grid shape, and the feature
+  names.
+- `step_{t:03d}_u00.npz`, one per decision: the policy score and rank of every
+  cell, which cells were eligible, already protected, and selected, plus the
+  features (both as fed to the network and raw).
+
+Three settings control the output:
+
+- `XAI_STEPS`: `"all"`, or a list of time steps, e.g. `[0]` for the initial
+  ranking only.
+- `XAI_SAMPLE_FRACTION`: `None` saves features for every cell. `0.05` saves
+  features only for the top max(5%, selected) eligible cells plus an equally
+  sized random sample of the remaining eligible cells. Scores and ranks are
+  still saved for all cells. `sample_is_top` marks the two groups, and
+  `sample_inclusion_prob` lets you reweight the random sample back to all
+  eligible cells.
+- `SEED`: makes the random sample reproducible.
+
+With the toy data and `XAI_SAMPLE_FRACTION = 0.05`, each step file is about
+1.3 MB (about 6.5 MB without subsampling). See
+[`docs/inference.md`](../../docs/inference.md) for the full list of saved
+arrays and how to load them.
 
 ## 2. Global vs. regional agents
 
@@ -233,3 +262,6 @@ where you'd want to draw real conclusions.
 - Try a specific region (`USE_REGIONAL_AGENTS = False; REGION_ID = "tile_r2_c2"`)
   to see a single agent restricted to one sub-area.
 - Increase `N_EPOCHS`/`N_PERTURBATIONS` for a more thoroughly trained policy.
+- Use the saved xAI data (`inference/xai/`) to see which features drive the
+  policy's ranking, e.g. with a surrogate model of `features_input` against
+  `scores`, or of top vs. random cells (`sample_is_top`).

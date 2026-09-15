@@ -97,6 +97,14 @@ os.makedirs(RES_DIR, exist_ok=True)
 LOG_FILE = "training_log.tsv"
 PLOT_DATA = True
 
+# xAI output: save features, policy scores and cell rankings at each decision
+# (one npz per decision in RES_DIR / "xai", see cn.InferenceRecorder)
+SAVE_XAI_DATA = True
+XAI_STEPS = "all"  # "all", or a list of time steps, e.g. [0] for the initial ranking
+# None = save features for all cells; e.g. 0.05 = save features only for the top
+# max(5%, selected) eligible cells plus an equally sized random sample of the rest
+XAI_SAMPLE_FRACTION = 0.05
+
 # =============================================================================
 # Episode Setup Function
 # =============================================================================
@@ -287,6 +295,9 @@ ep = cn.EpisodeRunner(
     n_steps=N_TIME_STEPS,
     budget_manager=budget_manager,
     save_protection_history=True,
+    recorder=cn.InferenceRecorder(
+        RES_DIR / "xai", steps=XAI_STEPS, feature_sample_fraction=XAI_SAMPLE_FRACTION, seed=SEED
+    ) if SAVE_XAI_DATA else None,
 )
 
 res, _ = ep.run_episode(np.load(TRAINED_MODEL))

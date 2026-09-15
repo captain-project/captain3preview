@@ -119,6 +119,9 @@ for timestep in range(n_steps):
     reward += rewards.calc_total_reward(env)
 ```
 
+At inference, an optional `InferenceRecorder` saves the features, policy scores and cell
+ranking at each decision for explainability analyses; see [inference.md](inference.md).
+
 ### EvolStrategiesTrainer
 
 Implements Natural Evolution Strategies (NES):

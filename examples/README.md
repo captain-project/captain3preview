@@ -3,7 +3,7 @@
 Working example scripts are in the `examples/` folder:
 - **[plot\_input\_data.py](https://github.com/captain-project/captain3preview/blob/main/examples/plot_input_data.py)** - Visualize spatial and time-varying input data
 - **[train_policy.py](https://github.com/captain-project/captain3preview/blob/main/examples/train_policy.py)** - Full training loop with real data
-- **[run_inference.py](https://github.com/captain-project/captain3preview/blob/main/examples/run_inference.py)** - Load a trained model and perform optimization
+- **[run_inference.py](https://github.com/captain-project/captain3preview/blob/main/examples/run_inference.py)** - Load a trained model and perform optimization. With `SAVE_XAI_DATA = True` it also saves features, policy scores and cell rankings for xAI analyses (see [docs/inference.md](https://github.com/captain-project/captain3preview/blob/main/docs/inference.md))
 
 Example data can be downloaded [here](https://polybox.ethz.ch/index.php/s/WKdbHHGj3ayL9w9). 
 A pre-trained model is available [here](https://polybox.ethz.ch/index.php/s/wZ5AMXPdzboZSm2). 

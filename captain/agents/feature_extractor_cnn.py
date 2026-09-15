@@ -125,6 +125,11 @@ class FeatureExtractorCNN:
         """Number of output features per cell."""
         return self.cnn.n_output_features
 
+    @property
+    def feature_names(self) -> list[str]:
+        """Generic names of the (learned) CNN output features."""
+        return [f"cnn_{k}" for k in range(self.n_features)]
+
     def _fill_grid(self, env: BioEnv) -> torch.Tensor:
         """Build the (1, 12, H, W) input grid from environment state.
 
