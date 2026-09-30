@@ -278,7 +278,11 @@ rewards = cn.NoRewards()
 xai_recorder = None
 if SAVE_XAI_DATA:
     xai_recorder = cn.InferenceRecorder(
-        RES_DIR / "xai", steps=XAI_STEPS, feature_sample_fraction=XAI_SAMPLE_FRACTION, seed=SEED
+        RES_DIR / "xai",
+        steps=XAI_STEPS,
+        feature_sample_fraction=XAI_SAMPLE_FRACTION,
+        seed=SEED,
+        save_sample_coords=True,  # grid coordinates of the recorded cells
     )
 
 # Create episode runner
@@ -361,6 +365,22 @@ if xai_recorder is not None and PLOT_XAI:
         cn.plots.plot_feature_scores_from_file(
             step_file, outfile=step_file.with_name(step_file.stem + "_features_vs_scores.png")
         )
+
+# map the policy scores of the recorded cells back onto the grid, using the
+# coordinates stored in each step file (save_sample_coords=True)
+if xai_recorder is not None and PLOT_XAI and xai_recorder.files:
+    d = np.load(xai_recorder.files[0])
+    cell_scores = d["scores"][d["sample_cell_idx"]] if "sample_cell_idx" in d else d["scores"]
+    score_map = np.full(mask.shape, np.nan)
+    score_map[d["sample_coords_row"], d["sample_coords_col"]] = cell_scores
+    cn.plots.plot_grid(
+        score_map,
+        title="policy scores of recorded cells (first decision)",
+        outfile=RES_DIR / "xai_score_map",
+        dpi=300,
+        figsize=(6, 8),
+        cmap="viridis",
+    )
 
 # run without protection for comparison
 # (NoBudgetManager's step context isn't compatible with RegionalPolicyNetwork,

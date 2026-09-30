@@ -83,6 +83,8 @@ class InferenceRecorder:
       With regional agents, cells are ranked within their region.
     - ``region_id`` (N,): index into ``region_names`` (-1 = no region); regional
       agents only.
+    - ``sample_coords_row``, ``sample_coords_col``: grid coordinates of the cells
+      whose features are saved; only with ``save_sample_coords``.
     - ``time_step``, ``update_idx``: decision indices.
 
     The paths of the step files written in the last episode are listed in ``files``
@@ -125,6 +127,7 @@ class InferenceRecorder:
         compress: bool = False,
         feature_sample_fraction: float | None = None,
         seed: int | None = None,
+        save_sample_coords: bool = False,
     ):
         """Initialize recorder.
 
@@ -137,6 +140,9 @@ class InferenceRecorder:
                 fraction of eligible cells defining the size of the top-ranked and
                 random samples (see class docstring).
             seed: Seed for the random sample of cells (reset at each episode).
+            save_sample_coords: If True, also save the grid coordinates of the cells
+                whose features are saved in each step file, so they can be mapped
+                without ``cells.npz``.
 
         Raises:
             ValueError: If ``steps`` or ``feature_sample_fraction`` are invalid.
@@ -158,6 +164,7 @@ class InferenceRecorder:
             raise ValueError(f"steps must be 'all', an int or a sequence of ints, got {steps!r}")
         self.save_raw_features = save_raw_features
         self.compress = compress
+        self.save_sample_coords = save_sample_coords
         self.reset()
 
     def reset(self) -> None:
@@ -297,12 +304,19 @@ class InferenceRecorder:
             arrays["features_input"] = features_input[:, sample_idx]
             if "features_raw" in arrays:
                 arrays["features_raw"] = arrays["features_raw"][:, sample_idx]
+        else:
+            sample_idx = np.arange(n_cells)
+
+        coords = env.sdms._coords
+        coords_row, coords_col = np.asarray(coords[0]), np.asarray(coords[1])
+        if self.save_sample_coords:
+            arrays["sample_coords_row"] = coords_row[sample_idx]
+            arrays["sample_coords_col"] = coords_col[sample_idx]
 
         if not self._cells_written:
-            coords = env.sdms._coords
             cells: dict[str, Any] = {
-                "coords_row": np.asarray(coords[0]),
-                "coords_col": np.asarray(coords[1]),
+                "coords_row": coords_row,
+                "coords_col": coords_col,
                 "grid_shape": np.asarray(env.sdms._data_shape[1:]),
                 "feature_names": feature_names,
             }

@@ -49,6 +49,7 @@ the feature update within that time step (always `00` unless
 | `sample_cell_idx` | (M,) | Cells whose features are saved (subsampling only) |
 | `sample_is_top` | (M,) | True for top-ranked cells, False for random cells (subsampling only) |
 | `sample_inclusion_prob` | (M,) | Probability that the cell was sampled (subsampling only) |
+| `sample_coords_row`, `sample_coords_col` | (M,) | Grid coordinates of those cells (`save_sample_coords` only) |
 | `scores` | (N,) | Raw network output, before masking |
 | `eligible` | (N,) | Cells that could be selected at this decision |
 | `already_protected` | (N,) | Cells protected before this decision |
@@ -115,6 +116,22 @@ cells; selected cells are always drawn. In `examples/run_inference.py` the plots
 by `PLOT_XAI`.
 
 ## Mapping back to the grid
+
+With `save_sample_coords=True`, each step file carries the grid coordinates of the cells whose
+features it holds, so a per-cell layer can be mapped without opening `cells.npz`:
+
+```python
+step = np.load("results/xai/step_000_u00.npz")
+score_map = np.full(grid_shape, np.nan)
+score_map[step["sample_coords_row"], step["sample_coords_col"]] = step["scores"][
+    step["sample_cell_idx"]
+]
+```
+
+Without subsampling the coordinates cover all cells, in the same order as the feature columns.
+`examples/run_inference.py` uses this to plot a map of the scores at the first decision.
+
+## Mapping all cells with `cells.npz`
 
 ```python
 import numpy as np
